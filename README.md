@@ -95,3 +95,7 @@ tags the release. Applications pin a release tag, not a branch.
 The client was developed as `tedge-zephyr` inside microcontroller-devices,
 and moved here with its history. Commit messages that refer to a pull
 request number refer to `thin-edge/microcontroller-devices`.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
