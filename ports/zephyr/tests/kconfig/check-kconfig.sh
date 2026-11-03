@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Check the tedge-zephyr Kconfig dependency rules.
+# Check the tedge Kconfig dependency rules.
 #
 # Zephyr treats an assignment that a dependency overrides ("was assigned the
 # value 'y' but got the value 'n'") as a warning, not an error, so these rules

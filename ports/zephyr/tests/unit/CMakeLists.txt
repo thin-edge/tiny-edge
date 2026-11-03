@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Unit tests for the module's pure helpers, run on native_sim:
-#   west build -b native_sim/native/64 tedge-zephyr/tests/unit -t run
+#   west build -b native_sim/native/64 ports/zephyr/tests/unit -t run
 #
 # The helpers have no state, no I/O and no Kconfig of their own, so the test
 # compiles them directly instead of building the whole client.
@@ -12,21 +12,21 @@ project(tedge_unit_tests C)
 
 target_sources(app PRIVATE
   src/main.c
-  ../../src/tedge_smartrest.c
-  ../../src/tedge_backoff.c
-  ../../src/tedge_pkcs7.c
-  ../../src/tedge_ra_allow_list.c
-  ../../src/tedge_ra_target.c
-  ../../src/tedge_url.c
-  ../../src/tedge_cert_decision.c
-  ../../src/tedge_telemetry.c
-  ../../src/tedge_json.c
-  ../../src/tedge_shell_allow_list.c
+  ../../../../core/src/tedge_smartrest.c
+  ../../../../core/src/tedge_backoff.c
+  ../../../../core/src/tedge_pkcs7.c
+  ../../../../core/src/tedge_ra_allow_list.c
+  ../../../../core/src/tedge_ra_target.c
+  ../../../../core/src/tedge_url.c
+  ../../../../core/src/tedge_cert_decision.c
+  ../../../../core/src/tedge_telemetry.c
+  ../../../../core/src/tedge_json.c
+  ../../../../core/src/tedge_shell_allow_list.c
   ../../src/tedge_log_ring.c
-  ../../src/tedge_op_json.c
-  ../../src/tedge_parameters.c
-  ../../src/tedge_otp.c
-  ../../src/tedge_fw_decision.c
+  ../../../../core/src/tedge_op_json.c
+  ../../../../core/src/tedge_parameters.c
+  ../../../../core/src/tedge_otp.c
+  ../../../../core/src/tedge_fw_decision.c
 )
 
 # The telemetry API is compiled in for the tests, with a small buffer so the
@@ -46,4 +46,4 @@ target_compile_definitions(app PRIVATE
   CONFIG_TEDGE_PARAMETERS_MAX=8
   CONFIG_TEDGE_PARAMETERS_SCHEMA=1
 )
-target_include_directories(app PRIVATE ../../include ../../src)
+target_include_directories(app PRIVATE ../../../../include ../../include ../../../../core/src)

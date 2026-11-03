@@ -1,9 +1,9 @@
 # Cumulocity tenant setup
 
-What a Cumulocity tenant needs so that devices running a `tedge-*` image show
+What a Cumulocity tenant needs so that devices running tiny-edge show
 their measurements, their state and an editable Parameters tab. The devices
 talk to the **Cumulocity MQTT Service** on thin-edge.io `te/` topics
-(README, "Telemetry in Cumulocity"); on that transport Cumulocity only stores
+([ports/zephyr/README.md](../ports/zephyr/README.md), "What the client publishes"); on that transport Cumulocity only stores
 what a **Smart Function** maps. Operations (restart, firmware, remote access,
 parameters, shell) need no mapping.
 
@@ -13,7 +13,7 @@ parameters, shell) need no mapping.
 | `smart-functions/tedge-zephyr-twin/` | `te/device/*///twin/*` → managed-object fragments | `remoteAccess`, `tedge_Agent`, and the current parameter values the Parameters tab shows |
 | `smart-functions/tedge-zephyr-firmware-progress/` | `te/device/*///progress/firmware` → `c8y_FirmwareDownload` events | download progress while a firmware update runs (optional) |
 | `smart-functions/tedge-zephyr-events/` | `te/device/*///e/*` → events | any event, including `zephyr_Identify` from the sw0 identify pattern |
-| `dtm/*.json` | Digital Twin Manager property definitions | the Parameters tab |
+| `dtm/*.json` | Digital Twin Manager property definitions for the client's own parameter sets (`zephyr_tedge`, `zephyr_tedge_remote_access`); an application registers its own sets the same way | the Parameters tab |
 
 ## Smart Functions
 
@@ -115,7 +115,7 @@ reason, and nothing is applied.
 ## Shell diagnostics
 
 The `tedge-full` Modbus and agent images of the ESP32-S3-DevKitC and the QT Py
-ESP32-S3 carry the shell command (`lib/common/tedge-boards/extras/shell-diagnostics.conf`)
+ESP32-S3 carry the shell command (`ports/zephyr/profiles/extras/shell-diagnostics.conf`)
 for general checks from the device's **Shell** tab. Send `help` to see what
 the device runs:
 

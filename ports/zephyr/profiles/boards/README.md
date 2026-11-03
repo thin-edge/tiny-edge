@@ -3,12 +3,12 @@
 One file per device: what a `tedge-zephyr` build needs from *this board*,
 whatever the application — where the mbedTLS heap lives and how big it is,
 PSRAM, TLS context and connection counts, network buffer depth. The feature
-set comes from a profile in `tedge-zephyr/profiles/`; put the board file
+set comes from a profile in `ports/zephyr/profiles/`; put the board file
 **after** it so its sizes win:
 
 ```sh
 west build --sysbuild -b esp32c6_devkitc/esp32c6/hpcore apps/modbus-server -- \
-  "-DEXTRA_CONF_FILE=/ws/app/tedge-zephyr/profiles/full.conf;/ws/app/lib/common/tedge-boards/esp32c6-devkitc.conf"
+  "-DEXTRA_CONF_FILE=/ws/modules/lib/tiny-edge/ports/zephyr/profiles/full.conf;/ws/modules/lib/tiny-edge/ports/zephyr/profiles/boards/esp32c6-devkitc.conf"
 ```
 
 | File | Board target | Notes |

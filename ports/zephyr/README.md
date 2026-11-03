@@ -1,6 +1,6 @@
-# tedge-zephyr
+# tiny-edge for Zephyr
 
-A [thin-edge.io](https://thin-edge.io) device-management client for
+The Zephyr port of tiny-edge: a [thin-edge.io](https://thin-edge.io) device-management client for
 [Zephyr RTOS](https://www.zephyrproject.org/) applications. Add it to your own
 Zephyr application to get device management next to whatever the application
 already does:
@@ -30,11 +30,26 @@ already does:
 
 ## Using it in an application
 
-The module is named `tedge`. Until it has its own repository, add it as an
-extra module before `find_package(Zephyr)`:
+The repository is a Zephyr module named `tedge`. Add it to your west
+manifest and west finds it; no CMake change is needed:
+
+```yaml
+manifest:
+  remotes:
+    - name: thin-edge
+      url-base: https://github.com/thin-edge
+  projects:
+    - name: tiny-edge
+      remote: thin-edge
+      revision: v0.1.0        # a release tag
+      path: modules/lib/tiny-edge
+```
+
+Without west, add the repository root as an extra module before
+`find_package(Zephyr)`:
 
 ```cmake
-list(APPEND ZEPHYR_EXTRA_MODULES /path/to/tedge-zephyr)
+list(APPEND ZEPHYR_EXTRA_MODULES /path/to/tiny-edge)
 ```
 
 Then enable it in `prj.conf`:
@@ -55,7 +70,7 @@ unlocks them for development and spikes only.
 
 The module is a guest in your image.
 
-| Concern | Your application | tedge-zephyr |
+| Concern | Your application | tiny-edge |
 |---|---|---|
 | Network | Brings up and recovers Wi-Fi or Ethernet | Waits for an IPv4 address (net_mgmt events); never touches the interface |
 | Identity | Sets the external ID, name, type and firmware name/version | Defaults: external ID `<prefix>-<MAC>`; firmware from the app's version |
@@ -632,17 +647,25 @@ socket while it runs.
 
 ## Layout
 
+The Zephyr port is one part of the repository (see the top-level README):
+
 ```
-tedge-zephyr/
-├── zephyr/module.yml         module name: tedge
-├── CMakeLists.txt, Kconfig, VERSION
-├── include/tedge/            public headers
-├── src/                      implementation
-├── profiles/                 feature-set overlays (minimal, full)
-├── samples/minimal/          builds with Zephyr and this module only
-├── tests/                    unit tests (native_sim) and Kconfig checks
-├── docs/                     findings worth keeping (upstream bugs, debugging)
-└── scripts/                  checks (self-containment, no logged secrets)
+tiny-edge/
+├── zephyr/module.yml         module name: tedge; points at ports/zephyr
+├── VERSION                   the client's version
+├── include/tedge/tedge.h     public API, shared by every port
+├── core/src/                 the client, shared by every port
+├── certs/                    default trust anchors
+└── ports/zephyr/
+    ├── CMakeLists.txt, Kconfig
+    ├── include/tedge/        Zephyr-only public headers (mbedTLS config)
+    ├── src/                  Zephyr-only sources: platform, time, shell,
+    │                         log backend, coredump
+    ├── profiles/             feature sets (minimal, ota, full) and per-board
+    │                         sizing (boards/, extras/)
+    ├── samples/minimal/      builds with Zephyr and this module only
+    ├── tests/                unit tests (native_sim) and Kconfig checks
+    └── docs/                 findings worth keeping (upstream bugs, debugging)
 ```
 
 `docs/debugging-against-real-devices.md` is worth reading before chasing a
@@ -650,11 +673,11 @@ failure on hardware: which counters to trust, the two ESP32 allocation
 failures that look alike, and the measurement traps that make a broken
 session look healthy.
 
-This directory is self-contained. Nothing in it may reference files outside
-it; `scripts/check-independence.py` enforces that, so the directory can move
-into its own repository unchanged.
+Some files in `core/` still call Zephyr directly; they are moving behind the
+port interface one at a time. `scripts/check-portability.py` lists them and
+stops new ones from appearing.
 
 ## Version
 
-`VERSION` holds the module's version. It is independent of any application's
+`VERSION` (at the repository root) holds the client's version. It is independent of any application's
 version and is returned by `tedge_version()`.

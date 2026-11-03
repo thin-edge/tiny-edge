@@ -3,7 +3,7 @@
 Kconfig overlays that select a coherent feature set, for example:
 
 ```sh
-west build -b <board> <app> -- -DEXTRA_CONF_FILE=/path/to/tedge-zephyr/profiles/minimal.conf
+west build -b <board> <app> -- -DEXTRA_CONF_FILE=/path/to/tiny-edge/ports/zephyr/profiles/minimal.conf
 ```
 
 - `minimal.conf`: connection, inventory, health, telemetry and restart over one

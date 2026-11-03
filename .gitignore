@@ -1,0 +1,23 @@
+# Build output
+build/
+build*/
+twister-out*/
+*.pyc
+__pycache__/
+build*.log
+
+# A west workspace initialised from ports/zephyr/west.yml puts Zephyr and its
+# modules beside this repository; ignore them if they land inside it. Not
+# /zephyr/: that directory holds this repository's module.yml.
+/modules/
+/bootloader/
+/tools/
+/.west/
+
+# Local overlays and credentials: never commit secrets.
+*.local.conf
+credentials/
+**/credentials/
+*.key
+*.csr
+*.pem.local

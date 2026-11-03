@@ -135,6 +135,6 @@ A TUI is not a pipe, and the difference decides the result.
 | `MBEDTLS_SSL_MAX_CONTENT_LEN` | no static effect; only per-session heap use |
 | throttling the bridge | made it **worse** (12 allocation failures vs 2) |
 
-See also `tedge-zephyr/profiles/` for per-board sizing and
+See also `ports/zephyr/profiles/` for per-board sizing and
 `docs/zephyr-http-chunked-body-bug.md` for an upstream bug found the same
 way.

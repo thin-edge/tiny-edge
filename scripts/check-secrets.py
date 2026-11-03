@@ -15,7 +15,9 @@ import re
 import sys
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parent.parent / "src"
+ROOT = Path(__file__).resolve().parent.parent
+# Every directory that holds client sources: the core and each port.
+SRC_DIRS = [ROOT / "core", *sorted((ROOT / "ports").glob("*/src"))]
 # Variables that hold a secret in this module.
 SECRETS = re.compile(r"(?:\bconn_key\b|->key\b|\bkey\b|\botp\b|"
                      r"\bpassword\b|\bdev_password\b|\bboot_password\b|"
@@ -44,7 +46,7 @@ def check(path: Path) -> list[str]:
 
 def main() -> int:
     problems = []
-    for path in sorted(SRC.glob("*.c")):
+    for path in sorted(p for d in SRC_DIRS for p in d.rglob("*.c")):
         problems.extend(check(path))
     for problem in problems:
         print(problem)

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Smallest application that uses tedge-zephyr. It builds with Zephyr and this
+# Smallest application that uses tiny-edge on Zephyr. It builds with Zephyr and this
 # module only, which proves the module does not depend on the repository that
 # hosts it.
 cmake_minimum_required(VERSION 3.20.0)
 
-# The module is this sample's grandparent directory. Once tedge-zephyr is a
-# west project, west finds it and this line can go.
-list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+# The module is the repository root, four levels up. In a workspace where
+# tiny-edge is a west project west finds it anyway; adding it twice is harmless.
+list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/../../../..)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(tedge_minimal C)

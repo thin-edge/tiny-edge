@@ -18,5 +18,5 @@ carries on without the feature.
 Run it from a Zephyr workspace:
 
 ```sh
-tedge-zephyr/tests/kconfig/check-kconfig.sh [build-root] [board]
+ports/zephyr/tests/kconfig/check-kconfig.sh [build-root] [board]
 ```
