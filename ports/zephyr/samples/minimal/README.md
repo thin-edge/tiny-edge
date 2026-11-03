@@ -35,4 +35,5 @@ west twister -T ports/zephyr/samples --integration
 ```
 
 native_sim has no MCUboot and no shell, so firmware update, crash dumps and
-the shell command drop out there; the ESP32-C6 builds carry every feature.
+the shell command drop out there. The ESP32-C6 and ESP32-S3-DevKitC builds
+carry every feature.

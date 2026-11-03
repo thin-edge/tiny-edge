@@ -7,8 +7,10 @@
 #
 # native_sim builds and runs (the console must show the version). It has no
 # MCUboot and no shell, so the firmware update, coredump and shell features
-# drop out there. The ESP32-C6 builds carry every feature, with MCUboot, and
-# add the board's sizing after the profile, as an application would.
+# drop out there. The ESP32 builds carry every feature, with MCUboot, and add
+# the board's sizing after the profile, as an application would: the
+# ESP32-C6 (RISC-V, no PSRAM) and the ESP32-S3-DevKitC (Xtensa, TLS heap in
+# PSRAM).
 sample:
   name: tiny-edge minimal
   description: Smallest application that includes the tiny-edge client
@@ -56,3 +58,31 @@ tests:
       - prj.conf
       - ../../profiles/full.conf
       - ../../profiles/boards/esp32c6-devkitc.conf
+  sample.tedge.minimal.esp32s3.minimal:
+    build_only: true
+    platform_allow: esp32s3_devkitc/esp32s3/procpu
+    integration_platforms: [esp32s3_devkitc/esp32s3/procpu]
+    extra_conf_files:
+      - prj.conf
+      - ../../profiles/minimal.conf
+      - ../../profiles/boards/esp32s3-devkitc.conf
+  sample.tedge.minimal.esp32s3.ota:
+    build_only: true
+    sysbuild: true
+    platform_allow: esp32s3_devkitc/esp32s3/procpu
+    integration_platforms: [esp32s3_devkitc/esp32s3/procpu]
+    extra_args: [SB_CONFIG_BOOTLOADER_MCUBOOT=y]
+    extra_conf_files:
+      - prj.conf
+      - ../../profiles/ota.conf
+      - ../../profiles/boards/esp32s3-devkitc.conf
+  sample.tedge.minimal.esp32s3.full:
+    build_only: true
+    sysbuild: true
+    platform_allow: esp32s3_devkitc/esp32s3/procpu
+    integration_platforms: [esp32s3_devkitc/esp32s3/procpu]
+    extra_args: [SB_CONFIG_BOOTLOADER_MCUBOOT=y]
+    extra_conf_files:
+      - prj.conf
+      - ../../profiles/full.conf
+      - ../../profiles/boards/esp32s3-devkitc.conf
