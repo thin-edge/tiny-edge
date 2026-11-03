@@ -32,6 +32,8 @@ target_sources(app PRIVATE
 # The telemetry API is compiled in for the tests, with a small buffer so the
 # "it filled up" cases are quick to reach.
 target_compile_definitions(app PRIVATE
+  # As the module itself: gmtime_r() is POSIX (see ports/zephyr/CMakeLists.txt).
+  _POSIX_C_SOURCE=200809L
   CONFIG_TEDGE_TELEMETRY=1
   CONFIG_TEDGE_TELEMETRY_BUFFER_BYTES=512
   # The module's log level comes from its Kconfig, which is not part of a

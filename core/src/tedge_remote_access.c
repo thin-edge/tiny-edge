@@ -613,9 +613,11 @@ static void bridge(void *a, void *b, void *c)
 		int64_t secs = MAX((k_uptime_get() - t_up) / 1000, 1);
 
 		LOG_INF("remote access: tunnel to %s ended (%s) after %lld s: "
-			"%llu B up, %llu B down", target, why, secs, up, down);
-		post(TEDGE_RA_CLOSED, TEDGE_RA_CLOSED_FMT, target, why, up,
-		     down);
+			"%llu B up, %llu B down", target, why, (long long)secs,
+			(unsigned long long)up, (unsigned long long)down);
+		/* uint64_t is unsigned long on a 64-bit host: cast for %llu. */
+		post(TEDGE_RA_CLOSED, TEDGE_RA_CLOSED_FMT, target, why,
+		     (unsigned long long)up, (unsigned long long)down);
 	}
 out:
 	if (ws >= 0) {

@@ -402,7 +402,8 @@ ZTEST(tedge_remote_access, test_close_event_fits)
 			    65535);
 	n = snprintf(ev.text, sizeof(ev.text),
 		     TEDGE_RA_CLOSED_FMT, target,
-		     "the cloud connection dropped", UINT64_MAX, UINT64_MAX);
+		     "the cloud connection dropped", (unsigned long long)UINT64_MAX,
+		     (unsigned long long)UINT64_MAX);
 	zassert_true(n < (int)sizeof(ev.text),
 		     "a %d-character close event does not fit", n);
 }
