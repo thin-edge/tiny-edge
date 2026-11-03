@@ -1,6 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Every client profile on every board the sample supports, so CI compiles
+# each feature the profiles enable:
+#
+#   west twister -T ports/zephyr/samples --integration
+#
+# native_sim builds and runs (the console must show the version). It has no
+# MCUboot and no shell, so the firmware update, coredump and shell features
+# drop out there. The ESP32-C6 builds carry every feature, with MCUboot, and
+# add the board's sizing after the profile, as an application would.
 sample:
-  name: tedge-zephyr minimal
-  description: Smallest application that includes the tedge-zephyr module
+  name: tiny-edge minimal
+  description: Smallest application that includes the tiny-edge client
 common:
   tags: tedge
   harness: console
@@ -9,9 +20,39 @@ common:
     regex:
       - "tedge-zephyr [0-9]+\\.[0-9]+\\.[0-9]+"
 tests:
-  sample.tedge.minimal:
-    integration_platforms:
-      - native_sim/native/64
-    platform_allow:
-      - native_sim/native/64
-      - esp32c6_devkitc/esp32c6/hpcore
+  sample.tedge.minimal.host.minimal:
+    platform_allow: native_sim/native/64
+    integration_platforms: [native_sim/native/64]
+    extra_conf_files: [prj.conf, ../../profiles/minimal.conf]
+  sample.tedge.minimal.host.full:
+    platform_allow: native_sim/native/64
+    integration_platforms: [native_sim/native/64]
+    extra_conf_files: [prj.conf, ../../profiles/full.conf]
+  sample.tedge.minimal.esp32c6.minimal:
+    build_only: true
+    platform_allow: esp32c6_devkitc/esp32c6/hpcore
+    integration_platforms: [esp32c6_devkitc/esp32c6/hpcore]
+    extra_conf_files:
+      - prj.conf
+      - ../../profiles/minimal.conf
+      - ../../profiles/boards/esp32c6-devkitc.conf
+  sample.tedge.minimal.esp32c6.ota:
+    build_only: true
+    sysbuild: true
+    platform_allow: esp32c6_devkitc/esp32c6/hpcore
+    integration_platforms: [esp32c6_devkitc/esp32c6/hpcore]
+    extra_args: [SB_CONFIG_BOOTLOADER_MCUBOOT=y]
+    extra_conf_files:
+      - prj.conf
+      - ../../profiles/ota.conf
+      - ../../profiles/boards/esp32c6-devkitc.conf
+  sample.tedge.minimal.esp32c6.full:
+    build_only: true
+    sysbuild: true
+    platform_allow: esp32c6_devkitc/esp32c6/hpcore
+    integration_platforms: [esp32c6_devkitc/esp32c6/hpcore]
+    extra_args: [SB_CONFIG_BOOTLOADER_MCUBOOT=y]
+    extra_conf_files:
+      - prj.conf
+      - ../../profiles/full.conf
+      - ../../profiles/boards/esp32c6-devkitc.conf
