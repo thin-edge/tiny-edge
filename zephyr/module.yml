@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# tiny-edge: thin-edge.io device-management client. This file makes the
+# repository a Zephyr module; the Zephyr port lives in ports/zephyr.
+name: tedge
+build:
+  cmake: ports/zephyr
+  kconfig: ports/zephyr/Kconfig
+samples:
+  - ports/zephyr/samples
+tests:
+  - ports/zephyr/tests

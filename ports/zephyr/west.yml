@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# West manifest for developing and testing the Zephyr port on its own. An
+# application does not need it: it lists tiny-edge as a project in its own
+# manifest (see ports/zephyr/README.md).
+#
+#   west init -l --mf ports/zephyr/west.yml tiny-edge
+#   west update --narrow -o=--depth=1
+#   west zephyr-export
+manifest:
+  version: "1.2"
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.4.2
+      import:
+        name-allowlist:
+          - hal_espressif         # the sample's ESP32-C6 platform
+          - mcuboot               # firmware update
+          - mbedtls
+          - tf-psa-crypto
+          - picolibc
+
+  self:
+    path: tiny-edge
