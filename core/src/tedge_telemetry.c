@@ -85,6 +85,13 @@ static bool drop_oldest_measurement(void)
 	return false;
 }
 
+/* Longest type and payload a queued message may carry, with the NUL. The
+ * payload is always built in a buffer this size; the type comes from the
+ * application, so it is checked here rather than cut short on the way out,
+ * where it would name a different type. */
+#define TYPE_MAX    40
+#define PAYLOAD_MAX 224
+
 static int enqueue(enum tedge_msg_kind kind, const char *type,
 		   const char *payload)
 {
@@ -93,7 +100,10 @@ static int enqueue(enum tedge_msg_kind kind, const char *type,
 	size_t need = sizeof(struct queued) + tlen + plen;
 	int rc = 0;
 
-	if (need > RING_BYTES) {
+	if (tlen > TYPE_MAX) {
+		return -EINVAL;
+	}
+	if (plen > PAYLOAD_MAX || need > RING_BYTES) {
 		return -EMSGSIZE;
 	}
 	k_mutex_lock(&ring_lock, K_FOREVER);
@@ -130,8 +140,9 @@ out:
 void tedge_telemetry_flush(void)
 {
 	for (;;) {
-		char type[40];
-		char payload[224];
+		char type[TYPE_MAX];
+		char payload[PAYLOAD_MAX];
+		size_t tlen;
 		enum tedge_msg_kind kind;
 		struct queued *q;
 
@@ -142,9 +153,10 @@ void tedge_telemetry_flush(void)
 			return;
 		}
 		kind = (enum tedge_msg_kind)q->kind;
-		snprintf(type, sizeof(type), "%s", q->text);
-		snprintf(payload, sizeof(payload), "%s",
-			 q->text + strlen(q->text) + 1);
+		/* enqueue() checked both lengths, so neither copy cuts. */
+		tlen = strlen(q->text) + 1;
+		memcpy(type, q->text, tlen);
+		memcpy(payload, q->text + tlen, strlen(q->text + tlen) + 1);
 		k_mutex_unlock(&ring_lock);
 
 		if (tedge_c8y_publish_telemetry(kind, type, payload) != 0) {

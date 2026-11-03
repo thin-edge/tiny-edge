@@ -402,7 +402,8 @@ ZTEST(tedge_remote_access, test_close_event_fits)
 			    65535);
 	n = snprintf(ev.text, sizeof(ev.text),
 		     TEDGE_RA_CLOSED_FMT, target,
-		     "the cloud connection dropped", UINT64_MAX, UINT64_MAX);
+		     "the cloud connection dropped", (unsigned long long)UINT64_MAX,
+		     (unsigned long long)UINT64_MAX);
 	zassert_true(n < (int)sizeof(ev.text),
 		     "a %d-character close event does not fit", n);
 }
@@ -574,6 +575,24 @@ ZTEST(tedge_telemetry, test_measurement_round_trip)
 	zassert_not_null(strstr(sent_payload[0], "\"temperature\":21.50"));
 	zassert_not_null(strstr(sent_payload[0], "\"humidity\":48.25"));
 	zassert_not_null(strstr(sent_payload[0], "\"time\":\""));
+}
+
+ZTEST(tedge_telemetry, test_long_type_is_refused_not_cut)
+{
+	struct tedge_measurement_value v = { .series = "x", .value = 1 };
+	/* 39 characters fit; 40 would be cut on the way out and name a
+	 * different type, so they are refused when queued. */
+	const char *fits = "abcdefghijklmnopqrstuvwxyzabcdefghijklm";
+	const char *too_long = "abcdefghijklmnopqrstuvwxyzabcdefghijklmn";
+
+	zassert_equal(strlen(fits), 39);
+	zassert_equal(tedge_publish_measurement(too_long, &v, 1, 0), -EINVAL);
+	zassert_equal(tedge_raise_alarm(too_long, TEDGE_ALARM_MAJOR, "x"),
+		      -EINVAL);
+	zassert_equal(tedge_publish_measurement(fits, &v, 1, 0), 0);
+	tedge_telemetry_flush();
+	zassert_equal(sent_count, 1);
+	zassert_str_equal(sent_type[0], fits);
 }
 
 ZTEST(tedge_telemetry, test_application_timestamp_is_kept)

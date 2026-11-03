@@ -32,7 +32,7 @@ LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
  * line lengths the parser and a log viewer handle. */
 #define PER_LINE   32
 /* "#CD:" + two characters a byte + a newline and its terminator. */
-#define LINE_MAX   (4 + PER_LINE * 2 + 2)
+#define DUMP_LINE_MAX   (4 + PER_LINE * 2 + 2)
 
 static bool have_dump;
 
@@ -55,7 +55,7 @@ static int dump_reader(const struct tedge_log_request *req,
 		       tedge_write_fn write, void *ctx, void *user_data)
 {
 	uint8_t raw[PER_LINE];
-	char line[LINE_MAX];
+	char line[DUMP_LINE_MAX];
 	size_t size = 0;
 	size_t off = 0;
 	int ret;

@@ -71,6 +71,10 @@ if(CONFIG_TEDGE)
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_AUTH_BOOTSTRAP ${TEDGE_CORE_SRC}/tedge_bootstrap.c)
   zephyr_library_compile_definitions(TEDGE_VERSION_STRING="${TEDGE_VERSION}")
+  # gmtime_r() is POSIX, not C17. picolibc declares it anyway; a host libc
+  # (native_sim) only does when asked, and an undeclared gmtime_r() returns
+  # a truncated pointer on a 64-bit host.
+  zephyr_library_compile_definitions(_POSIX_C_SOURCE=200809L)
 
   # Public API (include/tedge/tedge.h) and the Zephyr-only public headers
   # (include/tedge/mbedtls_user_config.h, which mbedTLS itself includes).

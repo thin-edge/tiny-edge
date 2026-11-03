@@ -1254,12 +1254,17 @@ static int c8y_poll(int timeout_ms)
 			(void)tedge_sr_quote(ev.text, quoted, sizeof(quoted));
 			switch (ev.type) {
 			case TEDGE_FW_INSTALLED: {
-				char fw[96];
 				char id[24];
 
-				snprintf(fw, sizeof(fw), "115,%s,%s",
+				/* sr holds "115," with the longest name (47)
+				 * and event text (143); a smaller buffer could
+				 * cut the version. */
+				BUILD_ASSERT(sizeof(sr) >= sizeof("115,,") +
+					     sizeof(tedge_identity()->firmware_name) +
+					     sizeof(ev.text));
+				snprintf(sr, sizeof(sr), "115,%s,%s",
 					 tedge_identity()->firmware_name, ev.text);
-				(void)tedge_c8y_publish_sr(fw);
+				(void)tedge_c8y_publish_sr(sr);
 				/* The update finished after a reboot, so its
 				 * id comes back from settings rather than
 				 * from the operation in flight. */

@@ -23,8 +23,8 @@ jobs:
       - run: python3 scripts/check-portability.py
       - run: python3 scripts/check-secrets.py
 
-  unit:
-    name: Unit tests and Kconfig rules
+  build:
+    name: Samples, unit tests and Kconfig rules
     runs-on: ubuntu-latest
     container:
       image: zephyrprojectrtos/zephyr-build:latest
@@ -46,12 +46,28 @@ jobs:
           west init -l --mf ports/zephyr/west.yml tiny-edge
           west update --narrow -o=--depth=1
           west zephyr-export
-      - name: Unit tests (native_sim)
+          # The ESP32-C6 builds need Espressif's Wi-Fi blobs, mbedTLS its
+          # PSA-crypto submodule, and the MCUboot builds imgtool's packages.
+          west blobs fetch hal_espressif
+          (cd modules/crypto/mbedtls && git submodule update --init --recursive --depth=1)
+          pip3 install -r bootloader/mcuboot/scripts/requirements.txt
+      # Every sample build (each profile on native_sim and the ESP32-C6, see
+      # ports/zephyr/samples/minimal/sample.yaml) and the unit tests, with
+      # warnings as errors. The native_sim builds also run.
+      - name: Samples and unit tests (twister)
         working-directory: tiny-edge
         run: |
-          west build -b native_sim/native/64 ports/zephyr/tests/unit \
-            -d ../build-unit --pristine
-          ../build-unit/zephyr/zephyr.exe
+          west twister -T ports/zephyr/samples -T ports/zephyr/tests/unit \
+            --integration --inline-logs -O ../twister-out
       - name: Kconfig dependency rules
         working-directory: tiny-edge
         run: bash ports/zephyr/tests/kconfig/check-kconfig.sh ../build-kconfig
+      - name: Twister results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twister-out
+          path: |
+            twister-out/twister.json
+            twister-out/**/build.log
+          if-no-files-found: ignore

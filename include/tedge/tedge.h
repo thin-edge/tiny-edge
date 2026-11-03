@@ -289,8 +289,10 @@ static inline uint32_t tedge_telemetry_dropped(void)
 /**
  * @brief Publish a measurement of @p type made of @p count values.
  *
+ * @param type At most 39 characters; it names the topic and the series.
  * @param timestamp_ms Unix time in ms, or 0 for "now".
- * @return 0 when queued, -ENOMEM if the client's buffer is full.
+ * @return 0 when queued, -ENOMEM if the client's buffer is full, -EINVAL
+ *         when @p type is too long. The same holds for events and alarms.
  */
 int tedge_publish_measurement(const char *type,
 			      const struct tedge_measurement_value *values,
