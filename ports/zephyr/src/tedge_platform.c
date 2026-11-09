@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0
  *
  * The Zephyr side of the device in <tedge/port/device.h>: the MAC address
- * the default device id is made from, and the reset.
+ * the default device id is made from, the firmware's name and version, and
+ * the reset.
  */
 
 #include <tedge/port/device.h>
 
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/sys/reboot.h>
 
@@ -31,6 +33,27 @@ int tedge_port_mac_address(uint8_t mac[6])
 	}
 	memcpy(mac, link->addr, 6);
 	return 0;
+}
+
+/* The image's name and version from the application's VERSION file, when
+ * the build has one (APP_VERSION_STRING), with the same headers in scope as
+ * the core had when it decided this itself. */
+const char *tedge_port_firmware_name(void)
+{
+#if defined(CONFIG_APP_VERSION_EXTENDED_STRING) || defined(APP_VERSION_STRING)
+	return CONFIG_KERNEL_BIN_NAME;
+#else
+	return "zephyr";
+#endif
+}
+
+const char *tedge_port_firmware_version(void)
+{
+#if defined(APP_VERSION_STRING)
+	return APP_VERSION_STRING;
+#else
+	return "0.0.0";
+#endif
 }
 
 FUNC_NORETURN void tedge_port_reset(void)

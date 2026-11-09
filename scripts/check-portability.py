@@ -36,13 +36,11 @@ KNOWN_RTOS_BOUND = {
     "core/src/tedge_bootstrap.c",
     "core/src/tedge_c8y.c",
     "core/src/tedge_cert_renew.c",
-    "core/src/tedge_core.c",
     "core/src/tedge_enroll.c",
     "core/src/tedge_firmware.c",
     "core/src/tedge_http_download.c",
     "core/src/tedge_http_upload.c",
     "core/src/tedge_internal.h",
-    "core/src/tedge_ra_target.c",
     "core/src/tedge_remote_access.c",
     "include/tedge/tedge.h",
 }

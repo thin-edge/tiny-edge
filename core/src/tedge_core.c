@@ -15,20 +15,18 @@
 #include "tedge_internal.h"
 #include "tedge_util.h"
 
+#include <tedge/port/device.h>
 #include <tedge/port/kv.h>
+#include <tedge/port/log.h>
+#include <tedge/port/net.h>
 #include <tedge/port/os.h>
 
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/net/net_event.h>
-#include <zephyr/net/net_if.h>
-#include <zephyr/net/net_mgmt.h>
 
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
-LOG_MODULE_REGISTER(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_REGISTER();
 
 #define BACKOFF_MIN_S 3
 #define STABLE_S      60
@@ -52,7 +50,6 @@ TEDGE_PORT_EVENT_DEFINE(events);
 #define EV_WAKE      (1u << 3)
 #define EV_RECONNECT (1u << 4)
 
-static struct net_mgmt_event_callback l4_cb;
 static char c8y_host[80];
 
 /* Twin fragments, republished after every reconnect. */
@@ -72,7 +69,7 @@ void *tedge_alloc(size_t size)
 	void *p = tedge_port_heap_alloc(size);
 
 	if (p == NULL) {
-		LOG_ERR("out of client heap (%zu B wanted of %d B; raise "
+		TEDGE_LOG_ERR("out of client heap (%zu B wanted of %d B; raise "
 			TEDGE_CONFIG_NAME(TEDGE_HEAP_SIZE) ")", size,
 			TEDGE_HEAP_SIZE);
 	}
@@ -120,7 +117,7 @@ static const char *state_name(enum tedge_state s)
 		"awaiting-registration", "connecting", "connected", "updating",
 	};
 
-	return ((size_t)s < ARRAY_SIZE(names)) ? names[s] : "?";
+	return ((size_t)s < TEDGE_ARRAY_SIZE(names)) ? names[s] : "?";
 }
 
 void tedge_set_state(enum tedge_state s)
@@ -128,7 +125,7 @@ void tedge_set_state(enum tedge_state s)
 	if ((enum tedge_state)tedge_port_atomic_set(&state, s) == s) {
 		return;
 	}
-	LOG_INF("state: %s", state_name(s));
+	TEDGE_LOG_INF("state: %s", state_name(s));
 	if (hooks != NULL && hooks->on_state != NULL) {
 		hooks->on_state(s, hooks->user_data);
 	}
@@ -162,7 +159,7 @@ static void progress(void)
 
 const char *tedge_c8y_host(void)
 {
-	return c8y_host[0] ? c8y_host : CONFIG_TEDGE_C8Y_URL;
+	return c8y_host[0] ? c8y_host : TEDGE_C8Y_URL;
 }
 
 int tedge_c8y_host_set(const char *host)
@@ -176,7 +173,7 @@ int tedge_c8y_host_set(const char *host)
 
 int tedge_set_c8y_url(const char *host)
 {
-	if (!IS_ENABLED(CONFIG_TEDGE_TRANSPORT_C8Y)) {
+	if (!TEDGE_IS_ENABLED(TEDGE_TRANSPORT_C8Y)) {
 		return -ENOTSUP;
 	}
 	return tedge_c8y_host_set(host);
@@ -235,7 +232,7 @@ int tedge_publish_twin(const char *fragment, const char *json)
 	if (rc == 0) {
 		tedge_port_event_post(&events, EV_WAKE);
 	} else if (rc == -ENOMEM) {
-		LOG_ERR("no free twin slot for \"%s\" (%d)", fragment, TWIN_SLOTS);
+		TEDGE_LOG_ERR("no free twin slot for \"%s\" (%d)", fragment, TWIN_SLOTS);
 	}
 	return rc;
 }
@@ -268,18 +265,13 @@ void tedge_twin_republish(void)
 /* Network events                                                            */
 /* ------------------------------------------------------------------------ */
 
-static void l4_handler(struct net_mgmt_event_callback *cb, uint64_t event,
-		       struct net_if *iface)
+/* From the port, in whatever context it learns of the change. */
+static void on_network(bool up)
 {
-	ARG_UNUSED(cb);
-	ARG_UNUSED(iface);
-
-	if (event == NET_EVENT_L4_CONNECTED ||
-	    event == NET_EVENT_IPV4_ADDR_ADD) { /* whichever the app provides */
+	if (up) {
 		tedge_port_event_clear(&events, EV_NET_DOWN);
 		tedge_port_event_post(&events, EV_NET_UP | EV_WAKE);
-	} else if (event == NET_EVENT_L4_DISCONNECTED ||
-		   event == NET_EVENT_IPV4_ADDR_DEL) {
+	} else {
 		tedge_port_event_clear(&events, EV_NET_UP);
 		tedge_port_event_post(&events, EV_NET_DOWN | EV_WAKE);
 	}
@@ -287,12 +279,8 @@ static void l4_handler(struct net_mgmt_event_callback *cb, uint64_t event,
 
 static bool network_up(void)
 {
-	struct net_if *iface = net_if_get_default();
-
-	if (iface != NULL && net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED)) {
-		return true;
-	}
-	return tedge_port_event_test(&events, EV_NET_UP) != 0;
+	return tedge_port_net_is_up() ||
+	       tedge_port_event_test(&events, EV_NET_UP) != 0;
 }
 
 /* Wait for connectivity. Returns false when the client is stopping. */
@@ -344,8 +332,8 @@ static void client_thread(void *arg)
 		rc = transport->connect();
 		if (rc != 0) {
 			backoff = tedge_backoff_next(backoff,
-						     CONFIG_TEDGE_RECONNECT_BACKOFF_MAX_S);
-			LOG_WRN("connect failed (%d); retrying in %u s", rc,
+						     TEDGE_RECONNECT_BACKOFF_MAX_S);
+			TEDGE_LOG_WRN("connect failed (%d); retrying in %u s", rc,
 				backoff);
 			uint32_t got = tedge_port_event_wait(
 				&events, EV_STOP | EV_NET_DOWN, backoff * 1000);
@@ -371,7 +359,7 @@ static void client_thread(void *arg)
 				/* Something replaced a credential; the new one
 				 * only takes effect on a new TLS session. */
 				tedge_port_event_clear(&events, EV_RECONNECT);
-				LOG_INF("reconnecting to pick up a new "
+				TEDGE_LOG_INF("reconnecting to pick up a new "
 					"credential");
 				rc = 0;
 				break;
@@ -384,10 +372,10 @@ static void client_thread(void *arg)
 			if (twin_dirty) {
 				tedge_twin_republish();
 			}
-#if defined(CONFIG_TEDGE_TELEMETRY)
+#if defined(TEDGE_TELEMETRY)
 			tedge_telemetry_flush();
 #endif
-#if defined(CONFIG_TEDGE_HEALTH)
+#if defined(TEDGE_HEALTH)
 			tedge_health_tick();
 #endif
 		}
@@ -398,10 +386,10 @@ static void client_thread(void *arg)
 		if (tedge_port_event_test(&events, EV_STOP)) {
 			break;
 		}
-		LOG_WRN("session ended (%d)", rc);
+		TEDGE_LOG_WRN("session ended (%d)", rc);
 		backoff = tedge_backoff_next(backoff,
-						     CONFIG_TEDGE_RECONNECT_BACKOFF_MAX_S);
-		LOG_INF("reconnecting in %u s", backoff);
+						     TEDGE_RECONNECT_BACKOFF_MAX_S);
+		TEDGE_LOG_INF("reconnecting in %u s", backoff);
 		(void)tedge_port_event_wait(&events, EV_STOP, backoff * 1000);
 	}
 	tedge_set_state(TEDGE_STATE_STOPPED);
@@ -435,50 +423,31 @@ int tedge_init(const struct tedge_identity *id, const struct tedge_hooks *h)
 
 	if (tedge_default_device_id(mac_id, sizeof(mac_id)) != 0) {
 		snprintf(mac_id, sizeof(mac_id), "%s-unknown",
-			 CONFIG_TEDGE_DEVICE_ID_PREFIX);
+			 TEDGE_DEVICE_ID_PREFIX);
 	}
 	copy_or_default(identity.external_id, sizeof(identity.external_id),
 			id ? id->external_id : NULL, mac_id);
 	copy_or_default(identity.name, sizeof(identity.name),
 			id ? id->name : NULL, identity.external_id);
 	copy_or_default(identity.type, sizeof(identity.type),
-			id ? id->type : NULL, CONFIG_TEDGE_DEVICE_TYPE);
+			id ? id->type : NULL, TEDGE_DEVICE_TYPE);
 	copy_or_default(identity.firmware_name, sizeof(identity.firmware_name),
 			id ? id->firmware_name : NULL,
-#if defined(CONFIG_APP_VERSION_EXTENDED_STRING) || defined(APP_VERSION_STRING)
-			CONFIG_KERNEL_BIN_NAME
-#else
-			"zephyr"
-#endif
-	);
+			tedge_port_firmware_name());
 	copy_or_default(identity.firmware_version,
 			sizeof(identity.firmware_version),
 			id ? id->firmware_version : NULL,
-#if defined(APP_VERSION_STRING)
-			APP_VERSION_STRING
-#else
-			"0.0.0"
-#endif
-	);
+			tedge_port_firmware_version());
 
-	/* L4 events come from the connection manager when the application
-	 * enables it; the IPv4 address events are always there. */
-	net_mgmt_init_event_callback(&l4_cb, l4_handler,
-				     NET_EVENT_IPV4_ADDR_ADD |
-					     NET_EVENT_IPV4_ADDR_DEL |
-					     (IS_ENABLED(CONFIG_NET_CONNECTION_MANAGER)
-						      ? NET_EVENT_L4_CONNECTED |
-								NET_EVENT_L4_DISCONNECTED
-						      : 0));
-	net_mgmt_add_event_callback(&l4_cb);
+	tedge_port_net_watch(on_network);
 
-#if defined(CONFIG_TEDGE_FIRMWARE_UPDATE)
+#if defined(TEDGE_FIRMWARE_UPDATE)
 	/* Before anything else: a test-booted image must confirm itself or be
 	 * rolled back, whether or not it ever reaches the cloud. */
 	tedge_fw_arm_confirm_deadline();
 #endif
 	initialised = true;
-	LOG_INF("tedge-zephyr %s: device \"%s\" (%s)", tedge_version(),
+	TEDGE_LOG_INF("tedge-zephyr %s: device \"%s\" (%s)", tedge_version(),
 		identity.external_id, identity.type);
 	return 0;
 }
@@ -492,15 +461,15 @@ int tedge_start(void)
 		return -EALREADY;
 	}
 	tedge_port_event_clear(&events, EV_STOP);
-#if defined(CONFIG_TEDGE_LOG_UPLOAD)
+#if defined(TEDGE_LOG_UPLOAD)
 	tedge_log_upload_init();
 #endif
-#if defined(CONFIG_TEDGE_PARAMETERS_SELF)
+#if defined(TEDGE_PARAMETERS_SELF)
 	/* After the application's sets, so a declaration of its own wins a
 	 * name clash, and before the sweep, which needs them all. */
 	tedge_self_params_declare();
 #endif
-#if defined(CONFIG_TEDGE_PARAMETERS)
+#if defined(TEDGE_PARAMETERS)
 	/* Every set the application means to declare is declared by now. */
 	tedge_params_on_start();
 #endif

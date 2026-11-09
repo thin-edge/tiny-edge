@@ -77,8 +77,9 @@ Functions a port implements are prefixed `tedge_port_`.
 | `time.h` | The wall clock: whether it is set, setting it from the network, reading it |
 | `device.h` | The MAC address, the reset and its cause, and crash dumps |
 | `kv.h` | Persistent key-value storage: the tenant, credentials, parameter values, the state of an update |
+| `net.h` | Whether the network is up, name lookup, TCP and TLS streams, UDP, and the TLS credentials |
 
-Network, TLS, crypto, and firmware slots are added the same way
+Crypto and firmware slots are added the same way
 as the core files that use them move behind the interface.
 
 The boundary is checked in CI. `scripts/check-portability.py` fails when

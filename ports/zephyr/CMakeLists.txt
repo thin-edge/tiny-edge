@@ -22,6 +22,7 @@ if(CONFIG_TEDGE)
     src/tedge_port.c
     src/tedge_port_os.c
     src/tedge_port_kv.c
+    src/tedge_port_net.c
     src/tedge_time.c
     ${TEDGE_CORE_SRC}/tedge_backoff.c
     ${TEDGE_CORE_SRC}/tedge_json.c

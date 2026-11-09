@@ -417,8 +417,8 @@ bool tedge_ra_in_allow_list(const char *list, const char *host, uint16_t port);
  * without the trailing dot. */
 bool tedge_ra_is_mdns_name(const char *host);
 
-/** True when a lookup that ended with @p status (a DNS_EAI_* code; map an
- * errno from the resolver to DNS_EAI_SYSTEM first, as getaddrinfo() does)
+/** True when a lookup that ended with @p status (a negative errno from
+ * tedge_port_resolve(), or the client's own mDNS query)
  * is worth another attempt. */
 bool tedge_ra_resolve_retryable(int status);
 

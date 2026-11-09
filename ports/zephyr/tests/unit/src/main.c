@@ -230,16 +230,13 @@ ZTEST(tedge_remote_access, test_mdns_name)
 ZTEST(tedge_remote_access, test_resolve_retryable)
 {
 	/* Nobody answered, or the resolver was not ready: ask again. */
-	zassert_true(tedge_ra_resolve_retryable(DNS_EAI_CANCELED));
-	zassert_true(tedge_ra_resolve_retryable(DNS_EAI_AGAIN));
-	zassert_true(tedge_ra_resolve_retryable(DNS_EAI_SYSTEM));
-	zassert_true(tedge_ra_resolve_retryable(DNS_EAI_MEMORY));
+	zassert_true(tedge_ra_resolve_retryable(-ETIMEDOUT));
+	zassert_true(tedge_ra_resolve_retryable(-EAGAIN));
 
-	/* An authoritative answer gives the same answer next time. */
-	zassert_false(tedge_ra_resolve_retryable(DNS_EAI_NONAME));
-	zassert_false(tedge_ra_resolve_retryable(DNS_EAI_NODATA));
-	zassert_false(tedge_ra_resolve_retryable(DNS_EAI_FAIL));
-	zassert_false(tedge_ra_resolve_retryable(DNS_EAI_FAMILY));
+	/* An authoritative answer gives the same answer next time, and so
+	 * does anything the port does not call transient. */
+	zassert_false(tedge_ra_resolve_retryable(-ENOENT));
+	zassert_false(tedge_ra_resolve_retryable(-EINVAL));
 }
 
 ZTEST(tedge_remote_access, test_policy_decide)

@@ -9,6 +9,7 @@
 
 #include <zephyr/logging/log.h>
 
+#define TEDGE_LOG_REGISTER() LOG_MODULE_REGISTER(tedge, CONFIG_TEDGE_LOG_LEVEL)
 #define TEDGE_LOG_DECLARE() LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL)
 
 #define TEDGE_LOG_ERR(...) LOG_ERR(__VA_ARGS__)

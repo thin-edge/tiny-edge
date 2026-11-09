@@ -29,6 +29,11 @@ int tedge_port_reset_cause(uint32_t *cause);
  */
 int tedge_port_mac_address(uint8_t mac[6]);
 
+/** The firmware's name and version, as the build knows them, for an
+ *  application that does not name its firmware itself. Never NULL. */
+const char *tedge_port_firmware_name(void);
+const char *tedge_port_firmware_version(void);
+
 /**
  * Reset the whole device, now. The core has already given the
  * application's reset hook its chance, and flushed the log.

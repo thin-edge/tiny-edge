@@ -8,8 +8,11 @@
  * application's, filtered and routed the same way. The port maps these
  * macros onto it in <tedge_port/log.h>:
  *
- * - TEDGE_LOG_DECLARE(): once per source file, at file scope, before the
- *   first log line. Zephyr declares the "tedge" log module.
+ * - TEDGE_LOG_REGISTER(): once in the whole client (tedge_core.c), at file
+ *   scope: creates the client's log source. Zephyr registers the "tedge"
+ *   log module.
+ * - TEDGE_LOG_DECLARE(): once in every other source file that logs, at
+ *   file scope, before the first log line.
  * - TEDGE_LOG_ERR(fmt, ...), TEDGE_LOG_WRN, TEDGE_LOG_INF, TEDGE_LOG_DBG:
  *   one line each, printf-style, no trailing newline.
  * - TEDGE_PORT_LOG_RUNTIME_LEVEL: defined to 1 when this build can change
