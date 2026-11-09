@@ -1073,7 +1073,7 @@ static int c8y_connect(void)
 	session_open = true;
 	connected_at = tedge_port_uptime_ms();
 	TEDGE_LOG_INF("connected to %s:%d as \"%s\" in %lld ms", tedge_c8y_host(),
-		C8Y_PORT, device_id, connected_at - t0);
+		C8Y_PORT, device_id, (long long)(connected_at - t0));
 
 	ret = session_start();
 	if (ret != 0) {
@@ -1114,8 +1114,9 @@ static int c8y_poll(int timeout_ms)
 				 * and event text (143); a smaller buffer could
 				 * cut the version. */
 				_Static_assert(sizeof(sr) >= sizeof("115,,") +
-					     sizeof(tedge_identity()->firmware_name) +
-					     sizeof(ev.text));
+					       sizeof(tedge_identity()->firmware_name) +
+					       sizeof(ev.text),
+					       "the installed-version message could be cut");
 				snprintf(sr, sizeof(sr), "115,%s,%s",
 					 tedge_identity()->firmware_name, ev.text);
 				(void)tedge_c8y_publish_sr(sr);

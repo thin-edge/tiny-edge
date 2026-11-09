@@ -215,7 +215,8 @@ static int renew(void)
 	(void)read_expiry(&cert_expires);
 	renewals++;
 	TEDGE_LOG_INF("certificate: renewed in %lld ms (%zu B), now valid for %d days",
-		tedge_port_uptime_ms() - t0, new_len, days_remaining());
+		(long long)(tedge_port_uptime_ms() - t0), new_len,
+		days_remaining());
 	clear_alarm();
 	return 0;
 }
@@ -252,7 +253,7 @@ void tedge_cert_renew_tick(void)
 		next_check_at = tedge_port_uptime_ms() + interval / 2 +
 				(tedge_port_random32() % (uint32_t)interval);
 		TEDGE_LOG_DBG("certificate: %d days left; next check in %lld min", days,
-			(next_check_at - tedge_port_uptime_ms()) / 60000);
+			(long long)((next_check_at - tedge_port_uptime_ms()) / 60000));
 		return;
 	}
 

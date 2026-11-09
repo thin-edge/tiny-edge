@@ -295,7 +295,7 @@ static void download_thread(void *arg)
 	}
 
 	TEDGE_LOG_INF("firmware: %lld B written in %lld s", (long long)dl_req.written,
-		(tedge_port_uptime_ms() - t0) / 1000);
+		(long long)((tedge_port_uptime_ms() - t0) / 1000));
 	publish_progress("installing", 100, dl_req.written, NULL);
 
 	/* From here the device is about to go dark for the swap. */
