@@ -4,9 +4,12 @@
 
 Rules:
 
-1. core/ and include/tedge/tedge.h use no RTOS API: no RTOS or vendor SDK
-   headers and no Kconfig symbols (CONFIG_*). They are the code every port
-   shares, so they may only use C99, the client's own headers and the port
+1. core/, include/tedge/tedge.h and the port interface (include/tedge/port/)
+   use no RTOS API: no RTOS or vendor SDK headers, no Kconfig symbols
+   (CONFIG_*), and none of the Zephyr calls and macros the core was written
+   with (k_*, LOG_*, ARRAY_SIZE, ...), which an RTOS header included by
+   another header would otherwise let through. They are the code every port
+   shares, so they may only use C, the client's own headers and the port
    interface.
 2. A port never reaches into another port (ports/<a> must not name ports/<b>).
 3. Nothing reaches outside the repository with "../" paths.
@@ -59,6 +62,14 @@ RTOS_HEADER = re.compile(
     r"|vxWorks\.h|sys/neutrino\.h|esp_[\w/]*\.h|freertos/)"
 )
 KCONFIG = re.compile(r"\bCONFIG_\w+")
+# Zephyr's kernel, logging, network and utility API, as the core used it
+# before the port interface. The port interface and tedge_util.h have the
+# portable names (tedge_port_*, TEDGE_LOG_*, TEDGE_ARRAY_SIZE, ...).
+ZEPHYR_API = re.compile(
+    r"(?<![\w.])(?:k_\w+|K_[A-Z]\w*|sys_[a-z]\w*|zsock_\w+|net_[a-z]\w*"
+    r"|settings_[a-z]\w*|LOG_(?:ERR|WRN|INF|DBG|MODULE_\w+)"
+    r"|ARRAY_SIZE|IS_ENABLED|ARG_UNUSED|STRINGIFY|BUILD_ASSERT"
+    r"|FUNC_NORETURN|MIN|MAX|CLAMP)\s*\(")
 PORT_REF = re.compile(r"\bports/(\w[\w-]*)")
 RELATIVE = re.compile(r"(?:\.\./)+[^\s\"'()<>;]*")
 
@@ -76,11 +87,17 @@ def is_code(path: Path) -> bool:
 
 
 def is_portable(rel: str) -> bool:
-    return rel.startswith("core/") or rel == "include/tedge/tedge.h"
+    return rel.startswith(("core/", "include/tedge/port/")) \
+        or rel == "include/tedge/tedge.h"
+
+
+def rtos_api(line: str) -> bool:
+    return bool(RTOS_HEADER.search(line) or KCONFIG.search(line)
+                or ZEPHYR_API.search(line))
 
 
 def rtos_bound(text: str) -> bool:
-    return bool(RTOS_HEADER.search(text) or KCONFIG.search(text))
+    return any(rtos_api(line) for line in text.splitlines())
 
 
 def check_file(path: Path) -> list[str]:
@@ -93,7 +110,7 @@ def check_file(path: Path) -> list[str]:
 
     if is_portable(rel) and rel not in KNOWN_RTOS_BOUND:
         for lineno, line in enumerate(text.splitlines(), start=1):
-            if RTOS_HEADER.search(line) or KCONFIG.search(line):
+            if rtos_api(line):
                 problems.append(f"{rel}:{lineno}: RTOS API in portable code: "
                                 f"{line.strip()}")
 
