@@ -31,6 +31,7 @@ if(CONFIG_TEDGE)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_HEALTH ${TEDGE_CORE_SRC}/tedge_health.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_TRANSPORT_C8Y
     ${TEDGE_CORE_SRC}/tedge_c8y.c
+    ${TEDGE_CORE_SRC}/tedge_mqtt.c
     ${TEDGE_CORE_SRC}/tedge_smartrest.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_C8Y_OPERATION_JSON

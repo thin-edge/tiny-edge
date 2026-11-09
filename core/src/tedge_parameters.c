@@ -486,7 +486,7 @@ int tedge_declare_parameters(const char *set_name,
 	}
 	if (n_values + count > TEDGE_PARAMETERS_MAX) {
 		TEDGE_LOG_ERR("params: %zu parameters wanted, %d left (raise "
-			"TEDGE_PARAMETERS_MAX)",
+			TEDGE_CONFIG_NAME(TEDGE_PARAMETERS_MAX) ")",
 			count, TEDGE_PARAMETERS_MAX - (int)n_values);
 		return -ENOSPC;
 	}

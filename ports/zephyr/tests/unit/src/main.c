@@ -2310,3 +2310,195 @@ ZTEST(tedge_ws, test_control_frame_too_long)
 }
 
 ZTEST_SUITE(tedge_ws, NULL, NULL, NULL, NULL, NULL);
+
+/* ------------------------------------------------------------------------ */
+/* The MQTT client (tedge_mqtt.c)                                            */
+/* ------------------------------------------------------------------------ */
+
+#include "tedge_mqtt.h"
+
+static char mqtt_topic[64];
+static char mqtt_payload[128];
+static size_t mqtt_len;
+static bool mqtt_dropped;
+static int mqtt_messages;
+
+static void mqtt_on_message(const char *topic, const char *payload, size_t len,
+			    bool dropped, void *ctx)
+{
+	ARG_UNUSED(ctx);
+	mqtt_messages++;
+	snprintf(mqtt_topic, sizeof(mqtt_topic), "%s", topic);
+	mqtt_dropped = dropped;
+	mqtt_len = len;
+	if (!dropped) {
+		snprintf(mqtt_payload, sizeof(mqtt_payload), "%s", payload);
+	}
+}
+
+static void mqtt_before(void *fixture)
+{
+	ARG_UNUSED(fixture);
+	mqtt_topic[0] = '\0';
+	mqtt_payload[0] = '\0';
+	mqtt_len = 0;
+	mqtt_dropped = false;
+	mqtt_messages = 0;
+	net_sent_len = 0;
+	net_reply_off = 0;
+	net_reply_len = 0;
+}
+
+ZTEST(tedge_mqtt, test_connect)
+{
+	static const char connack[] = "\x20\x02\x00\x00";
+	const struct tedge_mqtt_connect opts = {
+		.client_id = "dev1", .user = "t1/u", .password = "pw",
+		.keepalive_s = 60,
+	};
+	static const uint8_t want[] = {
+		0x10, 10 + 6 + 6 + 4,
+		0x00, 0x04, 'M', 'Q', 'T', 'T', 0x04, 0xC2, 0x00, 60,
+		0x00, 0x04, 'd', 'e', 'v', '1',
+		0x00, 0x04, 't', '1', '/', 'u',
+		0x00, 0x02, 'p', 'w',
+	};
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+
+	net_reply = connack;
+	net_reply_len = sizeof(connack) - 1;
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_ok(tedge_mqtt_connect(&m, &opts, 1000));
+	zassert_equal(net_sent_len, sizeof(want));
+	zassert_mem_equal(net_sent, want, sizeof(want));
+}
+
+ZTEST(tedge_mqtt, test_connect_refused)
+{
+	static const char connack[] = "\x20\x02\x00\x05"; /* not authorised */
+	const struct tedge_mqtt_connect opts = { .client_id = "dev1" };
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+
+	net_reply = connack;
+	net_reply_len = sizeof(connack) - 1;
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_equal(tedge_mqtt_connect(&m, &opts, 1000), -ECONNREFUSED);
+	zassert_equal(m.connack_code, 5);
+}
+
+ZTEST(tedge_mqtt, test_subscribe)
+{
+	/* A message arrives before the SUBACK, which refuses (0x80). */
+	static const char reply[] = "\x30\x07\x00\x03s/e" "hi"
+				    "\x90\x03\x00\x01\x80";
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+
+	net_reply = reply;
+	net_reply_len = sizeof(reply) - 1;
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_equal(tedge_mqtt_subscribe(&m, "s/ds", 1000), -EACCES);
+	zassert_mem_equal(net_sent, "\x82\x09\x00\x01\x00\x04s/ds\x01", 11);
+	zassert_equal(mqtt_messages, 1);
+	zassert_str_equal(mqtt_topic, "s/e");
+	zassert_str_equal(mqtt_payload, "hi");
+}
+
+ZTEST(tedge_mqtt, test_qos1_message_is_acknowledged)
+{
+	/* QoS 1, packet id 0x1234, fed a byte at a time. */
+	static const uint8_t pkt[] = { 0x32, 0x0B, 0x00, 0x04, 's', '/', 'd',
+				       's', 0x12, 0x34, '5', '1', '0' };
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	for (size_t i = 0; i < sizeof(pkt); i++) {
+		zassert_ok(tedge_mqtt_input(&m, pkt + i, 1));
+	}
+	zassert_equal(mqtt_messages, 1);
+	zassert_str_equal(mqtt_topic, "s/ds");
+	zassert_str_equal(mqtt_payload, "510");
+	zassert_equal(mqtt_len, 3);
+	zassert_equal(net_sent_len, 4);
+	zassert_mem_equal(net_sent, "\x40\x02\x12\x34", 4);
+}
+
+ZTEST(tedge_mqtt, test_too_big_is_dropped_whole)
+{
+	/* A 200-byte payload for a 64-byte buffer, then a small message: the
+	 * first is reported as dropped, and the second still arrives. */
+	static uint8_t pkt[3 + 2 + 3 + 200 + 7];
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+	size_t n = 0;
+
+	pkt[n++] = 0x30;
+	pkt[n++] = 0x80 | ((2 + 3 + 200) & 0x7F);
+	pkt[n++] = (2 + 3 + 200) >> 7;
+	pkt[n++] = 0;
+	pkt[n++] = 3;
+	memcpy(pkt + n, "s/e", 3);
+	n += 3;
+	memset(pkt + n, 'x', 200);
+	n += 200;
+	memcpy(pkt + n, "\x30\x04\x00\x01" "ab", 6);
+	n += 6;
+
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_ok(tedge_mqtt_input(&m, pkt, 100));
+	zassert_ok(tedge_mqtt_input(&m, pkt + 100, n - 100));
+	zassert_equal(mqtt_messages, 2);
+	zassert_str_equal(mqtt_topic, "a");
+	zassert_str_equal(mqtt_payload, "b");
+}
+
+ZTEST(tedge_mqtt, test_dropped_reports_topic)
+{
+	static uint8_t pkt[3 + 2 + 3 + 200];
+	struct tedge_mqtt m;
+	uint8_t rx[32];
+
+	pkt[0] = 0x30;
+	pkt[1] = 0x80 | ((2 + 3 + 200) & 0x7F);
+	pkt[2] = (2 + 3 + 200) >> 7;
+	pkt[3] = 0;
+	pkt[4] = 3;
+	memcpy(pkt + 5, "s/e", 3);
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_ok(tedge_mqtt_input(&m, pkt, sizeof(pkt)));
+	zassert_equal(mqtt_messages, 1);
+	zassert_true(mqtt_dropped);
+	zassert_str_equal(mqtt_topic, "s/e");
+	zassert_equal(mqtt_len, 200);
+}
+
+ZTEST(tedge_mqtt, test_malformed_length)
+{
+	static const uint8_t pkt[] = { 0x30, 0xFF, 0xFF, 0xFF, 0xFF, 0x01 };
+	struct tedge_mqtt m;
+	uint8_t rx[32];
+
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_equal(tedge_mqtt_input(&m, pkt, sizeof(pkt)), -EBADMSG);
+}
+
+ZTEST(tedge_mqtt, test_publish)
+{
+	struct tedge_mqtt m;
+	uint8_t rx[32];
+
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_ok(tedge_mqtt_publish(&m, "s/us", "100,a,b", 7, 1));
+	zassert_equal(net_sent_len, 2 + 2 + 4 + 2 + 7);
+	zassert_mem_equal(net_sent, "\x32\x0F\x00\x04s/us\x00\x01" "100,a,b",
+			  net_sent_len);
+
+	net_sent_len = 0;
+	zassert_ok(tedge_mqtt_publish(&m, "s/ucr", NULL, 0, 0));
+	zassert_mem_equal(net_sent, "\x30\x07\x00\x05s/ucr", 9);
+}
+
+ZTEST_SUITE(tedge_mqtt, NULL, NULL, mqtt_before, NULL, NULL);

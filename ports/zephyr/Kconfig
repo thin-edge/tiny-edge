@@ -114,8 +114,7 @@ config TEDGE_C8Y_SELECTS
 	select NET_TCP
 	select NET_UDP if TEDGE_SNTP
 	select DNS_RESOLVER
-	select MQTT_LIB
-	select MQTT_LIB_TLS
+	# MQTT is the client's own (core/src/tedge_mqtt.c), over TLS sockets.
 	select MBEDTLS
 	select NET_SOCKETS
 	select NET_SOCKETS_SOCKOPT_TLS

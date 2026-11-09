@@ -31,6 +31,7 @@ target_sources(app PRIVATE
   ../../../../core/src/tedge_fw_decision.c
   ../../../../core/src/tedge_http.c
   ../../../../core/src/tedge_ws.c
+  ../../../../core/src/tedge_mqtt.c
 )
 
 # The telemetry API is compiled in for the tests, with a small buffer so the

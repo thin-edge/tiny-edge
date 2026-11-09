@@ -10,23 +10,23 @@
 
 #include "tedge_internal.h"
 
-#include <tedge/port/kv.h>
+#include "tedge_mqtt.h"
+#include "tedge_util.h"
 
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/logging/log_ctrl.h>
-#include <zephyr/net/mqtt.h>
-#include <zephyr/net/socket.h>
-#include <zephyr/net/tls_credentials.h>
-#include <zephyr/sys/clock.h>
+#include <tedge/port/kv.h>
+#include <tedge/port/log.h>
+#include <tedge/port/net.h>
+#include <tedge/port/os.h>
+#include <tedge/port/time.h>
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
-LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_DECLARE();
 
-#if defined(CONFIG_TEDGE_C8Y_MQTT_SERVICE)
+#if defined(TEDGE_C8Y_MQTT_SERVICE)
 #define C8Y_PORT 9883
 #define FREE_FORM_TOPICS 1
 #else
@@ -34,7 +34,10 @@ LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
 #define FREE_FORM_TOPICS 0
 #endif
 
+#define QOS_0 0
+#define QOS_1 1
 #define CONNACK_TIMEOUT_MS 15000
+#define SUBACK_TIMEOUT_MS  3000
 #define SUBACK_RETRY_MAX   5
 #define JWT_REFRESH_MS     (50 * 60 * 1000)
 /* Three broker closes this soon after CONNACK look like another client using
@@ -42,18 +45,16 @@ LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
 #define TAKEOVER_WINDOW_MS 10000
 #define TAKEOVER_STRIKES   3
 
-/* The trust anchors listed in CONFIG_TEDGE_C8Y_CA_FILES. */
+/* The trust anchors listed in TEDGE_C8Y_CA_FILES. */
 static const unsigned char server_ca[] = {
 #include "tedge_ca_bundle.inc"
 	0x00
 };
 
-static const sec_tag_t sec_tags_mtls[] = { TEDGE_TAG_SERVER_CA, TEDGE_TAG_DEVICE };
-static const sec_tag_t sec_tags_basic[] = { TEDGE_TAG_SERVER_CA };
 
 /* Downstream topics: thin-edge.io's Cumulocity bridge set, minus the
  * bootstrap topics (tedge_bootstrap.c owns those). */
-#if defined(CONFIG_TEDGE_C8Y_OPERATION_JSON)
+#if defined(TEDGE_C8Y_OPERATION_JSON)
 /* Operations come as JSON, which is the only delivery that carries their
  * id; s/ds would deliver the same operations a second time. */
 #define OP_TOPIC "devicecontrol/notifications"
@@ -62,24 +63,17 @@ static const char *const sub_topics[] = { OP_TOPIC, "s/e", "s/dat" };
 static const char *const sub_topics[] = { "s/ds", "s/e", "s/dat" };
 #endif
 
-static struct mqtt_client client;
-static struct sockaddr_storage broker;
-static uint8_t rx_buf[2048];
-static uint8_t tx_buf[2048];
-static uint8_t payload_buf[CONFIG_TEDGE_C8Y_PAYLOAD_BYTES];
-static uint16_t next_msg_id = 1;
+static struct tedge_mqtt client;
+static int conn = -1;
+/* Every incoming packet is read whole into this: the payload, and its
+ * topic and header in front of it. */
+#define PACKET_OVERHEAD 64
+static uint8_t packet_buf[TEDGE_C8Y_PAYLOAD_BYTES + PACKET_OVERHEAD];
 static bool session_open;
-static bool connack_seen;
-static int connack_result;
+static bool ca_registered;
 static char jwt[1024];
 static int64_t jwt_at;
 static char device_id[64];
-
-static struct mqtt_utf8 basic_user;
-static struct mqtt_utf8 basic_password;
-
-static uint16_t last_suback_id;
-static uint8_t last_suback_code;
 
 static int64_t connected_at;
 static int takeover_strikes;
@@ -100,7 +94,7 @@ struct tedge_operation {
 };
 static struct tedge_operation current_op;
 
-#if defined(CONFIG_TEDGE_RESTART)
+#if defined(TEDGE_RESTART)
 static bool restart_requested;
 static bool restart_pending_after_boot;
 #endif
@@ -109,24 +103,16 @@ static bool restart_pending_after_boot;
 /* Publishing                                                                */
 /* ------------------------------------------------------------------------ */
 
-static int publish(const char *topic, const char *payload, enum mqtt_qos qos)
+static int publish(const char *topic, const char *payload, int qos)
 {
-	struct mqtt_publish_param p = {
-		.message.topic.topic.utf8 = (const uint8_t *)topic,
-		.message.topic.topic.size = strlen(topic),
-		.message.topic.qos = qos,
-		.message.payload.data = (uint8_t *)payload,
-		.message.payload.len = strlen(payload),
-		.message_id = next_msg_id++,
-	};
 	int ret;
 
 	if (!session_open) {
 		return -ENOTCONN;
 	}
-	ret = mqtt_publish(&client, &p);
+	ret = tedge_mqtt_publish(&client, topic, payload, strlen(payload), qos);
 	if (ret) {
-		LOG_ERR("publish to %s failed (%d)", topic, ret);
+		TEDGE_LOG_ERR("publish to %s failed (%d)", topic, ret);
 	}
 	return ret;
 }
@@ -161,7 +147,7 @@ int tedge_c8y_publish_sr(const char *line)
 	} else if (tmpl == 502 || tmpl == 503 || tmpl == 505 || tmpl == 506) {
 		op_executing = false;
 	}
-	return publish("s/us", line, MQTT_QOS_1_AT_LEAST_ONCE);
+	return publish("s/us", line, QOS_1);
 }
 
 const char *tedge_c8y_jwt(void)
@@ -234,7 +220,7 @@ static void op_succeeded(const char *name, const char *result)
 	op_status(506, 503, name, quoted);
 }
 
-#if defined(CONFIG_TEDGE_SHELL_COMMAND)
+#if defined(TEDGE_SHELL_COMMAND)
 /* Completes an operation with text whose line breaks matter, such as what
  * a shell command printed: they travel inside the quoted field. */
 static void op_finished_lines(const char *name, bool ok, const char *text)
@@ -286,7 +272,7 @@ int tedge_register_operation(const char *name, tedge_operation_handler_t handler
 			return 0;
 		}
 	}
-	LOG_ERR("no free operation slot for \"%s\" (%d)", name, OP_SLOTS);
+	TEDGE_LOG_ERR("no free operation slot for \"%s\" (%d)", name, OP_SLOTS);
 	return -ENOMEM;
 }
 
@@ -332,10 +318,10 @@ static void op_unsupported(const char *name, const char *why)
 }
 
 /* ------------------------------------------------------------------------ */
-/* Restart (CONFIG_TEDGE_RESTART)                                            */
+/* Restart (TEDGE_RESTART)                                            */
 /* ------------------------------------------------------------------------ */
 
-#if defined(CONFIG_TEDGE_RESTART)
+#if defined(TEDGE_RESTART)
 static void handle_restart(void)
 {
 	const struct tedge_hooks *hooks = tedge_hook_table();
@@ -348,7 +334,7 @@ static void handle_restart(void)
 						hooks->user_data);
 
 		if (rc != 0) {
-			LOG_WRN("restart vetoed by the application (%d): %s", rc,
+			TEDGE_LOG_WRN("restart vetoed by the application (%d): %s", rc,
 				reason[0] ? reason : "no reason given");
 			op_unsupported("c8y_Restart",
 				       reason[0] ? reason
@@ -356,7 +342,7 @@ static void handle_restart(void)
 			return;
 		}
 	}
-	LOG_INF("restart requested by the cloud");
+	TEDGE_LOG_INF("restart requested by the cloud");
 	op_executing_now("c8y_Restart");
 	/* The operation is completed after the reboot, so what identifies it
 	 * has to survive the reboot too. An empty id means "the oldest
@@ -367,9 +353,11 @@ static void handle_restart(void)
 	} else {
 		(void)tedge_port_kv_set(TEDGE_KEY_RESTART, &one, sizeof(one));
 	}
-	k_msleep(500);
-	mqtt_disconnect(&client, NULL);
-	k_msleep(300);
+	tedge_port_sleep_ms(500);
+	tedge_mqtt_disconnect(&client);
+	tedge_port_close(conn);
+	conn = -1;
+	tedge_port_sleep_ms(300);
 	tedge_device_reset();
 }
 
@@ -389,13 +377,13 @@ static bool restart_marker_load(void)
 		return pending;
 	}
 	if (n > 1) {
-		restart_op_id[MIN((size_t)n, sizeof(restart_op_id) - 1)] = '\0';
+		restart_op_id[TEDGE_MIN((size_t)n, sizeof(restart_op_id) - 1)] = '\0';
 		return true;
 	}
 	restart_op_id[0] = '\0';
 	return false;
 }
-#endif /* CONFIG_TEDGE_RESTART */
+#endif /* TEDGE_RESTART */
 
 /* ------------------------------------------------------------------------ */
 /* Downstream messages                                                       */
@@ -416,14 +404,14 @@ static void handle_operation(const char *line)
 			 * the one Cumulocity's 502 acts on. Cumulocity sends
 			 * pending operations again when the device
 			 * reconnects. */
-			LOG_WRN("operation %d arrived while %d were already "
+			TEDGE_LOG_WRN("operation %d arrived while %d were already "
 				"waiting; it stays pending until the next "
 				"connect", tmpl, op_queued);
 			return;
 		}
 		snprintf(op_queue[op_queued], OP_LINE_MAX, "%s", line);
 		op_queued++;
-		LOG_INF("operation %d waits: another one is running", tmpl);
+		TEDGE_LOG_INF("operation %d waits: another one is running", tmpl);
 		return;
 	}
 	dispatch_operation(line);
@@ -447,7 +435,7 @@ static void run_queued_operation(void)
 
 static void dispatch_operation(const char *line)
 {
-#if defined(CONFIG_TEDGE_C8Y_OPERATION_JSON)
+#if defined(TEDGE_C8Y_OPERATION_JSON)
 	/* The first field is the operation's id, where the static templates
 	 * put the device serial nobody read. */
 	if (tedge_sr_field(line, 1, current_op_id, sizeof(current_op_id)) <= 0) {
@@ -459,16 +447,16 @@ static void dispatch_operation(const char *line)
 
 	switch (tmpl) {
 	case 510: /* c8y_Restart */
-#if defined(CONFIG_TEDGE_RESTART)
+#if defined(TEDGE_RESTART)
 		restart_requested = true;
 #else
 		op_unsupported("c8y_Restart",
 			       "restart is not built into this image "
-			       "(CONFIG_TEDGE_RESTART)");
+			       "(" TEDGE_CONFIG_NAME(TEDGE_RESTART) ")");
 #endif
 		return;
 	case 532: /* c8y_ParameterUpdate_<set> */
-#if defined(CONFIG_TEDGE_PARAMETERS)
+#if defined(TEDGE_PARAMETERS)
 	{
 		char set[40];
 		char object[OP_LINE_MAX];
@@ -492,11 +480,11 @@ static void dispatch_operation(const char *line)
 #else
 		op_unsupported("c8y_ParameterUpdate",
 			       "parameters are not built into this image "
-			       "(CONFIG_TEDGE_PARAMETERS)");
+			       "(" TEDGE_CONFIG_NAME(TEDGE_PARAMETERS) ")");
 #endif
 		return;
 	case 515:
-#if defined(CONFIG_TEDGE_FIRMWARE_UPDATE)
+#if defined(TEDGE_FIRMWARE_UPDATE)
 	{
 		char reason[128];
 
@@ -518,11 +506,11 @@ static void dispatch_operation(const char *line)
 #else
 		op_unsupported("c8y_Firmware",
 			       "firmware update is not built into this image "
-			       "(CONFIG_TEDGE_FIRMWARE_UPDATE)");
+			       "(" TEDGE_CONFIG_NAME(TEDGE_FIRMWARE_UPDATE) ")");
 #endif
 		return;
 	case 530:
-#if defined(CONFIG_TEDGE_REMOTE_ACCESS)
+#if defined(TEDGE_REMOTE_ACCESS)
 	{
 		char reason[112];
 
@@ -534,11 +522,11 @@ static void dispatch_operation(const char *line)
 #else
 		op_unsupported("c8y_RemoteAccessConnect",
 			       "remote access is not built into this image "
-			       "(CONFIG_TEDGE_REMOTE_ACCESS)");
+			       "(" TEDGE_CONFIG_NAME(TEDGE_REMOTE_ACCESS) ")");
 #endif
 		return;
 	case 511:
-#if defined(CONFIG_TEDGE_SHELL_COMMAND)
+#if defined(TEDGE_SHELL_COMMAND)
 	{
 		char reason[160];
 
@@ -556,7 +544,7 @@ static void dispatch_operation(const char *line)
 		break;
 #endif
 	case 522:
-#if defined(CONFIG_TEDGE_LOG_UPLOAD)
+#if defined(TEDGE_LOG_UPLOAD)
 	{
 		char reason[128];
 
@@ -568,7 +556,7 @@ static void dispatch_operation(const char *line)
 #else
 		op_unsupported("c8y_LogfileRequest",
 			       "log upload is not built into this image "
-			       "(CONFIG_TEDGE_LOG_UPLOAD)");
+			       "(" TEDGE_CONFIG_NAME(TEDGE_LOG_UPLOAD) ")");
 #endif
 		return;
 	default:
@@ -589,7 +577,7 @@ static void dispatch_operation(const char *line)
 			snprintf(current_op.payload, sizeof(current_op.payload),
 				 "%.*s", (int)sizeof(current_op.payload) - 1,
 				 line);
-			ARG_UNUSED(line_sr);
+			TEDGE_UNUSED(line_sr);
 			op_executing_now(op_name);
 			ops[i].handler(&current_op, ops[i].user_data);
 			return;
@@ -609,7 +597,7 @@ static void dispatch_operation(const char *line)
 		op_unsupported(op_name, why);
 		return;
 	}
-	LOG_DBG("unhandled downstream message: %.40s", line);
+	TEDGE_LOG_DBG("unhandled downstream message: %.40s", line);
 }
 
 static void handle_message(const char *topic, const char *payload, size_t len)
@@ -619,16 +607,16 @@ static void handle_message(const char *topic, const char *payload, size_t len)
 		if (len > 3 && len - 3 < sizeof(jwt)) {
 			memcpy(jwt, payload + 3, len - 3);
 			jwt[len - 3] = '\0';
-			jwt_at = k_uptime_get();
-			LOG_DBG("token received (%zu B)", len - 3);
+			jwt_at = tedge_port_uptime_ms();
+			TEDGE_LOG_DBG("token received (%zu B)", len - 3);
 		}
 		return;
 	}
 	if (strcmp(topic, "s/e") == 0) {
-		LOG_WRN("cloud error: %.*s", (int)MIN(len, 160), payload);
+		TEDGE_LOG_WRN("cloud error: %.*s", (int)TEDGE_MIN(len, 160), payload);
 		return;
 	}
-#if defined(CONFIG_TEDGE_C8Y_OPERATION_JSON)
+#if defined(TEDGE_C8Y_OPERATION_JSON)
 	if (strcmp(topic, OP_TOPIC) == 0) {
 		char line[OP_LINE_MAX];
 
@@ -639,173 +627,51 @@ static void handle_message(const char *topic, const char *payload, size_t len)
 	}
 #endif
 	if (strcmp(topic, "s/ds") == 0) {
-		LOG_DBG("s/ds: %.60s", payload);
+		TEDGE_LOG_DBG("s/ds: %.60s", payload);
 		handle_operation(payload);
 	}
 }
 
-static void mqtt_evt(struct mqtt_client *c, const struct mqtt_evt *evt)
+static void on_message(const char *topic, const char *payload, size_t len,
+		       bool dropped, void *ctx)
 {
-	switch (evt->type) {
-	case MQTT_EVT_CONNACK:
-		connack_seen = true;
-		connack_result = evt->result;
-		break;
-
-	case MQTT_EVT_SUBACK:
-		last_suback_id = evt->param.suback.message_id;
-		last_suback_code = evt->param.suback.return_codes.len
-					   ? evt->param.suback.return_codes.data[0]
-					   : 0x80;
-		break;
-
-	case MQTT_EVT_PUBLISH: {
-		const struct mqtt_publish_param *p = &evt->param.publish;
-		size_t len = p->message.payload.len;
-		char topic[48];
-		size_t tlen = MIN(p->message.topic.topic.size, sizeof(topic) - 1);
-		int ret;
-
-		memcpy(topic, p->message.topic.topic.utf8, tlen);
-		topic[tlen] = '\0';
-
-		if (len >= sizeof(payload_buf)) {
-			LOG_WRN("%s: %zu-byte message dropped (buffer is %zu)",
-				topic, len, sizeof(payload_buf));
-			while (len > 0) {
-				ret = mqtt_read_publish_payload_blocking(
-					c, payload_buf,
-					MIN(len, sizeof(payload_buf)));
-				if (ret <= 0) {
-					break;
-				}
-				len -= ret;
-			}
-			break;
-		}
-		ret = mqtt_readall_publish_payload(c, payload_buf, len);
-		if (ret) {
-			LOG_ERR("reading the %s payload failed (%d)", topic, ret);
-			break;
-		}
-		payload_buf[len] = '\0';
-		if (p->message.topic.qos == MQTT_QOS_1_AT_LEAST_ONCE) {
-			struct mqtt_puback_param ack = {
-				.message_id = p->message_id,
-			};
-
-			mqtt_publish_qos1_ack(c, &ack);
-		}
-		handle_message(topic, (const char *)payload_buf, len);
-		break;
+	TEDGE_UNUSED(ctx);
+	if (dropped) {
+		TEDGE_LOG_WRN("%s: %zu-byte message dropped (buffer is %zu)",
+			      topic, len, sizeof(packet_buf) - PACKET_OVERHEAD);
+		return;
 	}
-
-	case MQTT_EVT_DISCONNECT:
-		session_open = false;
-		break;
-
-	default:
-		break;
-	}
+	handle_message(topic, payload, len);
 }
 
 /* ------------------------------------------------------------------------ */
 /* Session                                                                   */
 /* ------------------------------------------------------------------------ */
 
-/* Read input (and keep the connection alive) for up to @p ms, or until
- * @p done. */
-static int pump(int ms, const bool *done)
+/* Read input (and keep the connection alive) for up to @p ms. */
+static int pump(int ms)
 {
-	int64_t end = k_uptime_get() + ms;
-
-	do {
-		struct zsock_pollfd fds = {
-			.fd = client.transport.tls.sock,
-			.events = ZSOCK_POLLIN,
-		};
-		int wait = (int)CLAMP(end - k_uptime_get(), 0, 1000);
-		int ret = zsock_poll(&fds, 1, wait);
-
-		if (ret < 0) {
-			return -errno;
-		}
-		if (ret > 0 && (fds.revents & ZSOCK_POLLIN)) {
-			ret = mqtt_input(&client);
-			if (ret) {
-				return ret;
-			}
-		}
-		if (ret > 0 && (fds.revents & (ZSOCK_POLLERR | ZSOCK_POLLHUP))) {
-			return -ECONNRESET;
-		}
-		ret = mqtt_live(&client);
-		if (ret && ret != -EAGAIN) {
-			return ret;
-		}
-	} while (k_uptime_get() < end && !(done && *done));
-	return 0;
+	return tedge_mqtt_poll(&client, (uint32_t)ms);
 }
 
-static int resolve_broker(void)
+/* TLS to the tenant: with the device certificate, or only verifying the
+ * server when the device logs in with a user name and password. */
+static int open_connection(void)
 {
-	struct zsock_addrinfo hints = {
-		.ai_family = AF_INET,
-		.ai_socktype = SOCK_STREAM,
-	};
-	struct zsock_addrinfo *res;
-	char port[8];
+	uint8_t addr[4];
 	int ret;
 
-	snprintf(port, sizeof(port), "%d", C8Y_PORT);
-	ret = zsock_getaddrinfo(tedge_c8y_host(), port, &hints, &res);
+	ret = tedge_port_resolve(tedge_c8y_host(), addr, 10000);
 	if (ret != 0) {
-		LOG_ERR("DNS lookup of %s failed (%d)", tedge_c8y_host(), ret);
+		TEDGE_LOG_ERR("DNS lookup of %s failed (%d)", tedge_c8y_host(),
+			      ret);
 		return -EHOSTUNREACH;
 	}
-	memcpy(&broker, res->ai_addr, res->ai_addrlen);
-	zsock_freeaddrinfo(res);
-	return 0;
-}
-
-static void client_setup(void)
-{
-	struct mqtt_sec_config *tls = &client.transport.tls.config;
-	const char *user = tedge_auth_username();
-
-	mqtt_client_init(&client);
-	client.broker = &broker;
-	client.evt_cb = mqtt_evt;
-	client.client_id.utf8 = (const uint8_t *)device_id;
-	client.client_id.size = strlen(device_id);
-	client.protocol_version = MQTT_VERSION_3_1_1;
-	client.rx_buf = rx_buf;
-	client.rx_buf_size = sizeof(rx_buf);
-	client.tx_buf = tx_buf;
-	client.tx_buf_size = sizeof(tx_buf);
-	client.keepalive = 60;
-	client.clean_session = 1;
-
-	if (user != NULL) {
-		basic_user.utf8 = (const uint8_t *)user;
-		basic_user.size = strlen(user);
-		basic_password.utf8 = (const uint8_t *)tedge_auth_password();
-		basic_password.size = strlen(tedge_auth_password());
-		client.user_name = &basic_user;
-		client.password = &basic_password;
-	}
-
-	client.transport.type = MQTT_TRANSPORT_SECURE;
-	tls->peer_verify = TLS_PEER_VERIFY_REQUIRED;
-	tls->cipher_list = NULL;
-	if (user != NULL) {
-		tls->sec_tag_list = sec_tags_basic;
-		tls->sec_tag_count = ARRAY_SIZE(sec_tags_basic);
-	} else {
-		tls->sec_tag_list = sec_tags_mtls;
-		tls->sec_tag_count = ARRAY_SIZE(sec_tags_mtls);
-	}
-	tls->hostname = tedge_c8y_host();
+	return tedge_port_connect(addr, C8Y_PORT,
+				  (tedge_auth_username() != NULL)
+					  ? TEDGE_PORT_TLS
+					  : TEDGE_PORT_TLS_DEVICE,
+				  tedge_c8y_host(), CONNACK_TIMEOUT_MS);
 }
 
 /* Subscribe to one filter (the MQTT Service refuses several per packet).
@@ -815,43 +681,24 @@ static void client_setup(void)
 static int subscribe_one(const char *topic)
 {
 	for (int attempt = 1; attempt <= SUBACK_RETRY_MAX; attempt++) {
-		struct mqtt_topic t = {
-			.topic.utf8 = (const uint8_t *)topic,
-			.topic.size = strlen(topic),
-			.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		};
-		struct mqtt_subscription_list list = {
-			.list = &t,
-			.list_count = 1,
-			.message_id = next_msg_id++,
-		};
-		int ret;
+		int ret = tedge_mqtt_subscribe(&client, topic, SUBACK_TIMEOUT_MS);
 
-		last_suback_id = 0;
-		last_suback_code = 0;
-		ret = mqtt_subscribe(&client, &list);
-		if (ret != 0) {
-			LOG_ERR("subscribing to %s failed (%d)", topic, ret);
-			return ret;
-		}
-		for (int i = 0; i < 10 && last_suback_id != list.message_id; i++) {
-			ret = pump(300, NULL);
-			if (ret != 0) {
-				return ret;
-			}
-		}
-		if (last_suback_id == list.message_id && last_suback_code != 0x80) {
+		if (ret == 0) {
 			return 0;
 		}
-		LOG_WRN("subscription to %s refused (attempt %d of %d); the "
-			"device may not exist yet", topic, attempt,
-			SUBACK_RETRY_MAX);
-		ret = pump(5000, NULL); /* let 100 be processed, then retry */
+		if (ret != -EACCES && ret != -ETIMEDOUT) {
+			TEDGE_LOG_ERR("subscribing to %s failed (%d)", topic, ret);
+			return ret;
+		}
+		TEDGE_LOG_WRN("subscription to %s refused (attempt %d of %d); the "
+			      "device may not exist yet", topic, attempt,
+			      SUBACK_RETRY_MAX);
+		ret = pump(5000); /* let 100 be processed, then retry */
 		if (ret != 0) {
 			return ret;
 		}
 	}
-	LOG_ERR("could not subscribe to %s", topic);
+	TEDGE_LOG_ERR("could not subscribe to %s", topic);
 	return -EACCES;
 }
 
@@ -861,20 +708,20 @@ static void publish_supported_ops(void)
 	char line[160] = "114";
 	size_t n = strlen(line);
 
-	if (IS_ENABLED(CONFIG_TEDGE_RESTART)) {
+	if (TEDGE_IS_ENABLED(TEDGE_RESTART)) {
 		n += snprintf(line + n, sizeof(line) - n, ",c8y_Restart");
 	}
-	if (IS_ENABLED(CONFIG_TEDGE_REMOTE_ACCESS)) {
+	if (TEDGE_IS_ENABLED(TEDGE_REMOTE_ACCESS)) {
 		n += snprintf(line + n, sizeof(line) - n,
 			      ",c8y_RemoteAccessConnect");
 	}
-	if (IS_ENABLED(CONFIG_TEDGE_FIRMWARE_UPDATE)) {
+	if (TEDGE_IS_ENABLED(TEDGE_FIRMWARE_UPDATE)) {
 		n += snprintf(line + n, sizeof(line) - n, ",c8y_Firmware");
 	}
-	if (IS_ENABLED(CONFIG_TEDGE_SHELL_COMMAND)) {
+	if (TEDGE_IS_ENABLED(TEDGE_SHELL_COMMAND)) {
 		n += snprintf(line + n, sizeof(line) - n, ",c8y_Command");
 	}
-	if (IS_ENABLED(CONFIG_TEDGE_LOG_UPLOAD)) {
+	if (TEDGE_IS_ENABLED(TEDGE_LOG_UPLOAD)) {
 		n += snprintf(line + n, sizeof(line) - n,
 			      ",c8y_LogfileRequest");
 	}
@@ -888,7 +735,7 @@ static void publish_supported_ops(void)
 		(void)tedge_c8y_publish_sr(line);
 	}
 
-#if defined(CONFIG_TEDGE_LOG_UPLOAD)
+#if defined(TEDGE_LOG_UPLOAD)
 	/* The log types this image can actually produce, so an operator is
 	 * never offered one the device does not have. */
 	{
@@ -909,7 +756,7 @@ static int publish_twin_impl(const char *fragment, const char *json)
 	if (FREE_FORM_TOPICS) {
 		snprintf(topic, sizeof(topic), "te/device/%s///twin/%s", device_id,
 			 fragment);
-		rc = publish(topic, json, MQTT_QOS_1_AT_LEAST_ONCE);
+		rc = publish(topic, json, QOS_1);
 	} else {
 		/* Core MQTT has no free-form topics: a direct inventory update,
 		 * as thin-edge.io's mapper does. */
@@ -918,10 +765,10 @@ static int publish_twin_impl(const char *fragment, const char *json)
 		snprintf(topic, sizeof(topic),
 			 "inventory/managedObjects/update/%s", device_id);
 		snprintf(body, sizeof(body), "{\"%s\":%s}", fragment, json);
-		rc = publish(topic, body, MQTT_QOS_1_AT_LEAST_ONCE);
+		rc = publish(topic, body, QOS_1);
 	}
 	if (rc == 0) {
-		LOG_INF("twin %s: %s", fragment, json);
+		TEDGE_LOG_INF("twin %s: %s", fragment, json);
 	}
 	return rc;
 }
@@ -937,11 +784,11 @@ int tedge_c8y_publish_progress(const char *kind, const char *json)
 	}
 	snprintf(topic, sizeof(topic), "te/device/%s///progress/%s", device_id,
 		 kind);
-	LOG_DBG("progress/%s: %s", kind, json);
-	return publish(topic, json, MQTT_QOS_0_AT_MOST_ONCE);
+	TEDGE_LOG_DBG("progress/%s: %s", kind, json);
+	return publish(topic, json, QOS_0);
 }
 
-#if defined(CONFIG_TEDGE_TELEMETRY)
+#if defined(TEDGE_TELEMETRY)
 /* Core MQTT has no free-form topics: one SmartREST 200 per series, taken
  * back out of the JSON the API built. */
 static int smartrest_measurement(const char *type, const char *payload)
@@ -982,14 +829,14 @@ int tedge_c8y_publish_telemetry(enum tedge_msg_kind kind, const char *type,
 
 		snprintf(topic, sizeof(topic), "te/device/%s///%s/%s", device_id,
 			 kinds[kind], type);
-		LOG_DBG("%s: %s", topic + strlen(topic) - strlen(type) - 3,
+		TEDGE_LOG_DBG("%s: %s", topic + strlen(topic) - strlen(type) - 3,
 			payload);
 		/* A measurement lost in a reconnect is one reading; an event or
 		 * an alarm carries meaning, so those go at least once. */
 		return publish(topic, payload,
 			       (kind == TEDGE_MSG_MEASUREMENT)
-				       ? MQTT_QOS_0_AT_MOST_ONCE
-				       : MQTT_QOS_1_AT_LEAST_ONCE);
+				       ? QOS_0
+				       : QOS_1);
 	}
 
 	/* Core MQTT: SmartREST. The payload is JSON either way, so the
@@ -1021,7 +868,7 @@ int tedge_c8y_publish_telemetry(enum tedge_msg_kind kind, const char *type,
 		tedge_json_field(payload, "severity", severity, sizeof(severity));
 		tedge_json_field(payload, "text", text, sizeof(text));
 		tedge_json_field(payload, "time", when, sizeof(when));
-		for (size_t i = 0; i < ARRAY_SIZE(map); i++) {
+		for (size_t i = 0; i < TEDGE_ARRAY_SIZE(map); i++) {
 			if (strcmp(severity, map[i].name) == 0) {
 				tmpl = map[i].template;
 				break;
@@ -1038,23 +885,23 @@ int tedge_c8y_publish_telemetry(enum tedge_msg_kind kind, const char *type,
 		return tedge_c8y_publish_sr(line);
 	}
 }
-#endif /* CONFIG_TEDGE_TELEMETRY */
+#endif /* TEDGE_TELEMETRY */
 
 static void publish_health(void)
 {
 	char topic[128];
 	char body[96];
-	struct timespec ts;
+	time_t now = 0;
 
 	if (!FREE_FORM_TOPICS) {
 		return;
 	}
-	(void)sys_clock_gettime(SYS_CLOCK_REALTIME, &ts);
+	(void)tedge_port_time_now(&now);
 	snprintf(topic, sizeof(topic), "te/device/%s/service/tedge-zephyr/status/health",
 		 device_id);
 	snprintf(body, sizeof(body), "{\"status\":\"up\",\"time\":%lld}",
-		 (long long)ts.tv_sec);
-	(void)publish(topic, body, MQTT_QOS_1_AT_LEAST_ONCE);
+		 (long long)now);
+	(void)publish(topic, body, QOS_1);
 }
 
 /* 100, subscriptions, 114, 117, s/uat, then state (design D6). */
@@ -1071,9 +918,9 @@ static int session_start(void)
 
 	snprintf(line, sizeof(line), "100,%s,%s", id->name, id->type);
 	(void)tedge_c8y_publish_sr(line);
-	(void)pump(500, NULL);
+	(void)pump(500);
 
-	for (size_t i = 0; i < ARRAY_SIZE(sub_topics); i++) {
+	for (size_t i = 0; i < TEDGE_ARRAY_SIZE(sub_topics); i++) {
 		int rc = subscribe_one(sub_topics[i]);
 
 		if (rc != 0) {
@@ -1093,10 +940,10 @@ static int session_start(void)
 	 * stopped listening. */
 	(void)tedge_c8y_publish_sr("500");
 	{
-#if defined(CONFIG_TEDGE_PARAMETERS_SELF)
+#if defined(TEDGE_PARAMETERS_SELF)
 		int required = tedge_self_required_interval_min();
 #else
-		int required = CONFIG_TEDGE_REQUIRED_INTERVAL_MIN;
+		int required = TEDGE_REQUIRED_INTERVAL_MIN;
 #endif
 
 		if (required > 0) {
@@ -1106,21 +953,21 @@ static int session_start(void)
 	}
 	if (tedge_auth_username() == NULL) {
 		/* Only certificate devices get a token. */
-		(void)publish("s/uat", "", MQTT_QOS_0_AT_MOST_ONCE);
+		(void)publish("s/uat", "", QOS_0);
 	}
 
-#if defined(CONFIG_TEDGE_FIRMWARE_UPDATE)
+#if defined(TEDGE_FIRMWARE_UPDATE)
 	{
 		char ver[24] = "";
 		char fw[96];
 
 		if (tedge_fw_running_version(ver, sizeof(ver)) == 0) {
-			LOG_INF("firmware: running %s %s", id->firmware_name, ver);
+			TEDGE_LOG_INF("firmware: running %s %s", id->firmware_name, ver);
 			snprintf(fw, sizeof(fw), "115,%s,%s", id->firmware_name,
 				 ver);
 			(void)tedge_c8y_publish_sr(fw);
 		} else {
-			LOG_WRN("firmware: cannot read the running version");
+			TEDGE_LOG_WRN("firmware: cannot read the running version");
 		}
 	}
 #endif
@@ -1130,7 +977,7 @@ static int session_start(void)
 		 tedge_version(), FREE_FORM_TOPICS ? "c8y-mqtt-service" : "c8y-core-mqtt",
 		 id->firmware_name, id->firmware_version);
 	(void)publish_twin_impl("tedge_Agent", agent);
-#if defined(CONFIG_TEDGE_REMOTE_ACCESS)
+#if defined(TEDGE_REMOTE_ACCESS)
 	{
 		char ra[224];
 
@@ -1142,11 +989,11 @@ static int session_start(void)
 #endif
 	publish_health();
 
-#if defined(CONFIG_TEDGE_FIRMWARE_UPDATE)
+#if defined(TEDGE_FIRMWARE_UPDATE)
 	/* Confirm a test boot, or report an image MCUboot rolled back. */
 	tedge_fw_on_connected();
 #endif
-#if defined(CONFIG_TEDGE_CERT_RENEWAL)
+#if defined(TEDGE_CERT_RENEWAL)
 	{
 		char cert[160];
 
@@ -1155,15 +1002,15 @@ static int session_start(void)
 		}
 	}
 #endif
-#if defined(CONFIG_TEDGE_RESTART)
+#if defined(TEDGE_RESTART)
 	if (restart_pending_after_boot) {
 		op_finish_by_id(restart_op_id, "c8y_Restart", true, NULL);
 		(void)tedge_port_kv_delete(TEDGE_KEY_RESTART);
 		restart_pending_after_boot = false;
-		LOG_INF("restart operation reported as successful");
+		TEDGE_LOG_INF("restart operation reported as successful");
 	}
 #endif
-	return pump(500, NULL);
+	return pump(500);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1172,20 +1019,24 @@ static int session_start(void)
 
 static int c8y_connect(void)
 {
-	int64_t t0 = k_uptime_get();
+	int64_t t0 = tedge_port_uptime_ms();
 	int ret;
 
 	if (tedge_c8y_host()[0] == '\0') {
-		LOG_ERR("no Cumulocity host: set CONFIG_TEDGE_C8Y_URL or call "
+		TEDGE_LOG_ERR("no Cumulocity host: set " TEDGE_CONFIG_NAME(TEDGE_C8Y_URL)
+			      " or call "
 			"tedge_set_c8y_url()");
 		return -EDESTADDRREQ;
 	}
 
-	ret = tls_credential_add(TEDGE_TAG_SERVER_CA, TLS_CREDENTIAL_CA_CERTIFICATE,
-				 server_ca, sizeof(server_ca));
-	if (ret != 0 && ret != -EEXIST) {
-		LOG_ERR("could not register the trust anchor (%d)", ret);
-		return ret;
+	if (!ca_registered) {
+		ret = tedge_port_tls_set_ca(server_ca, sizeof(server_ca));
+		if (ret != 0) {
+			TEDGE_LOG_ERR("could not register the trust anchor (%d)",
+				      ret);
+			return ret;
+		}
+		ca_registered = true;
 	}
 
 	ret = tedge_auth_prepare(device_id, sizeof(device_id));
@@ -1193,37 +1044,41 @@ static int c8y_connect(void)
 		return ret;
 	}
 
-	ret = resolve_broker();
-	if (ret != 0) {
-		return ret;
+	conn = open_connection();
+	if (conn < 0) {
+		TEDGE_LOG_ERR("TLS connect to %s:%d failed (%d)",
+			      tedge_c8y_host(), C8Y_PORT, conn);
+		return conn;
 	}
+	tedge_mqtt_init(&client, conn, packet_buf, sizeof(packet_buf),
+			on_message, NULL);
+	{
+		const struct tedge_mqtt_connect opts = {
+			.client_id = device_id,
+			.user = tedge_auth_username(),
+			.password = tedge_auth_password(),
+			.keepalive_s = 60,
+		};
 
-	client_setup();
-	connack_seen = false;
-	connack_result = 0;
-	ret = mqtt_connect(&client);
+		ret = tedge_mqtt_connect(&client, &opts, CONNACK_TIMEOUT_MS);
+	}
 	if (ret != 0) {
-		LOG_ERR("TLS/MQTT connect to %s:%d failed (%d)", tedge_c8y_host(),
-			C8Y_PORT, ret);
+		TEDGE_LOG_ERR("no CONNACK from %s:%d (ret=%d result=%d)",
+			      tedge_c8y_host(), C8Y_PORT, ret,
+			      client.connack_code);
+		tedge_port_close(conn);
+		conn = -1;
 		return ret;
 	}
 	session_open = true;
-
-	ret = pump(CONNACK_TIMEOUT_MS, &connack_seen);
-	if (ret != 0 || !connack_seen || connack_result != 0) {
-		LOG_ERR("no CONNACK from %s:%d (ret=%d result=%d)",
-			tedge_c8y_host(), C8Y_PORT, ret, connack_result);
-		mqtt_abort(&client);
-		session_open = false;
-		return (ret != 0) ? ret : -ECONNREFUSED;
-	}
-	connected_at = k_uptime_get();
-	LOG_INF("connected to %s:%d as \"%s\" in %lld ms", tedge_c8y_host(),
+	connected_at = tedge_port_uptime_ms();
+	TEDGE_LOG_INF("connected to %s:%d as \"%s\" in %lld ms", tedge_c8y_host(),
 		C8Y_PORT, device_id, connected_at - t0);
 
 	ret = session_start();
 	if (ret != 0) {
-		mqtt_abort(&client);
+		tedge_port_close(conn);
+		conn = -1;
 		session_open = false;
 	}
 	return ret;
@@ -1231,7 +1086,7 @@ static int c8y_connect(void)
 
 static int c8y_poll(int timeout_ms)
 {
-	int ret = pump(timeout_ms, NULL);
+	int ret = pump(timeout_ms);
 
 	if (ret != 0) {
 		return ret;
@@ -1239,12 +1094,12 @@ static int c8y_poll(int timeout_ms)
 	if (!session_open) {
 		return -ENOTCONN;
 	}
-#if defined(CONFIG_TEDGE_RESTART)
+#if defined(TEDGE_RESTART)
 	if (restart_requested) {
 		handle_restart();
 	}
 #endif
-#if defined(CONFIG_TEDGE_FIRMWARE_UPDATE)
+#if defined(TEDGE_FIRMWARE_UPDATE)
 	{
 		struct tedge_fw_event ev;
 		char sr[224], quoted[160];
@@ -1258,7 +1113,7 @@ static int c8y_poll(int timeout_ms)
 				/* sr holds "115," with the longest name (47)
 				 * and event text (143); a smaller buffer could
 				 * cut the version. */
-				BUILD_ASSERT(sizeof(sr) >= sizeof("115,,") +
+				_Static_assert(sizeof(sr) >= sizeof("115,,") +
 					     sizeof(tedge_identity()->firmware_name) +
 					     sizeof(ev.text));
 				snprintf(sr, sizeof(sr), "115,%s,%s",
@@ -1290,7 +1145,7 @@ static int c8y_poll(int timeout_ms)
 		}
 	}
 #endif
-#if defined(CONFIG_TEDGE_SHELL_COMMAND)
+#if defined(TEDGE_SHELL_COMMAND)
 	{
 		struct tedge_shell_event ev;
 
@@ -1302,7 +1157,7 @@ static int c8y_poll(int timeout_ms)
 		}
 	}
 #endif
-#if defined(CONFIG_TEDGE_LOG_UPLOAD)
+#if defined(TEDGE_LOG_UPLOAD)
 	{
 		struct tedge_log_event ev;
 
@@ -1315,7 +1170,7 @@ static int c8y_poll(int timeout_ms)
 		}
 	}
 #endif
-#if defined(CONFIG_TEDGE_REMOTE_ACCESS)
+#if defined(TEDGE_REMOTE_ACCESS)
 	{
 		struct tedge_ra_event ev;
 		static int64_t twin_due;
@@ -1339,9 +1194,9 @@ static int c8y_poll(int timeout_ms)
 			}
 			(void)tedge_c8y_publish_sr(sr);
 			/* The seat is freed just after the event is posted. */
-			twin_due = k_uptime_get() + 1000;
+			twin_due = tedge_port_uptime_ms() + 1000;
 		}
-		if (twin_due != 0 && k_uptime_get() >= twin_due) {
+		if (twin_due != 0 && tedge_port_uptime_ms() >= twin_due) {
 			char ra[224];
 
 			twin_due = 0;
@@ -1354,14 +1209,14 @@ static int c8y_poll(int timeout_ms)
 	/* Anything that finished above freed the gate, so the next operation
 	 * can start — on this thread, like every other dispatch. */
 	run_queued_operation();
-#if defined(CONFIG_TEDGE_CERT_RENEWAL)
+#if defined(TEDGE_CERT_RENEWAL)
 	/* Renew the certificate while there is still plenty of time. */
 	tedge_cert_renew_tick();
 #endif
 	if (tedge_auth_username() == NULL && jwt_at != 0 &&
-	    k_uptime_get() - jwt_at > JWT_REFRESH_MS) {
-		jwt_at = k_uptime_get(); /* one request per interval */
-		(void)publish("s/uat", "", MQTT_QOS_0_AT_MOST_ONCE);
+	    tedge_port_uptime_ms() - jwt_at > JWT_REFRESH_MS) {
+		jwt_at = tedge_port_uptime_ms(); /* one request per interval */
+		(void)publish("s/uat", "", QOS_0);
 	}
 	return 0;
 }
@@ -1369,15 +1224,17 @@ static int c8y_poll(int timeout_ms)
 static void c8y_disconnect(void)
 {
 	if (session_open) {
-		(void)mqtt_disconnect(&client, NULL);
+		tedge_mqtt_disconnect(&client);
 		session_open = false;
 	}
+	tedge_port_close(conn);
+	conn = -1;
 	/* A session the broker closed just after CONNACK, three times in a
 	 * row, usually means another client uses this ID. */
 	if (connected_at != 0 &&
-	    k_uptime_get() - connected_at < TAKEOVER_WINDOW_MS) {
+	    tedge_port_uptime_ms() - connected_at < TAKEOVER_WINDOW_MS) {
 		if (++takeover_strikes >= TAKEOVER_STRIKES) {
-			LOG_WRN("the broker keeps closing this session moments "
+			TEDGE_LOG_WRN("the broker keeps closing this session moments "
 				"after it connects: another client may be using "
 				"the ID \"%s\"", device_id);
 			takeover_strikes = 0;
@@ -1402,14 +1259,14 @@ static const struct tedge_transport c8y_transport = {
 
 const struct tedge_transport *tedge_transport_get(void)
 {
-#if defined(CONFIG_TEDGE_RESTART)
+#if defined(TEDGE_RESTART)
 	static bool marker_loaded;
 
 	if (!marker_loaded) {
 		marker_loaded = true;
 		restart_pending_after_boot = restart_marker_load();
 		if (restart_pending_after_boot) {
-			LOG_INF("a restart operation is waiting to be reported");
+			TEDGE_LOG_INF("a restart operation is waiting to be reported");
 		}
 	}
 #endif
