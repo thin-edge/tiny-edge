@@ -10,19 +10,19 @@
  *     -> PKCS#7 reply -> certificate -> TLS credentials
  *
  * The key never leaves PSA for signing the CSR. It is exported once, as DER,
- * because Zephyr's tls_credentials take a key buffer; that copy stays in RAM
- * while the credential is registered (a known limitation, spikes P9).
+ * because the port's TLS credentials take a key buffer (Zephyr's do); that
+ * copy stays in RAM while the credential is registered (a known limitation,
+ * spikes P9).
  */
 
+#include "tedge_http.h"
 #include "tedge_internal.h"
 
 #include <tedge/port/kv.h>
+#include <tedge/port/net.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/net/http/client.h>
-#include <zephyr/net/socket.h>
-#include <zephyr/net/tls_credentials.h>
 
 #include <psa/crypto.h>
 #include <mbedtls/asn1.h>
@@ -290,79 +290,51 @@ out:
 /* HTTPS POST to the tenant                                                  */
 /* ------------------------------------------------------------------------ */
 
-static int on_body(struct http_parser *parser, const char *at, size_t length)
+static int on_body(int status, const void *data, size_t length, void *ctx)
 {
-	size_t n;
+	size_t n = MIN(length, sizeof(bufs->resp) - 1 - resp_len);
 
-	ARG_UNUSED(parser);
-	n = MIN(length, sizeof(bufs->resp) - 1 - resp_len);
-	memcpy(bufs->resp + resp_len, at, n);
+	ARG_UNUSED(status);
+	ARG_UNUSED(ctx);
+	memcpy(bufs->resp + resp_len, data, n);
 	resp_len += n;
 	bufs->resp[resp_len] = '\0';
 	return 0;
 }
 
-static const struct http_parser_settings parser_cb = { .on_body = on_body };
-
-static int on_response(struct http_response *rsp, enum http_final_call final,
-		       void *user_data)
-{
-	ARG_UNUSED(final);
-	ARG_UNUSED(user_data);
-	resp_status = rsp->http_status_code;
-	return 0;
-}
-
 static int https_post(const char *path, const char *auth, const char *body)
 {
-	struct zsock_addrinfo hints = { .ai_family = AF_INET,
-					.ai_socktype = SOCK_STREAM };
-	struct zsock_addrinfo *res;
 	const char *headers[] = { auth, NULL };
-	sec_tag_t tags[1] = { TEDGE_TAG_SERVER_CA };
-	struct http_request req = { 0 };
 	const char *host = tedge_c8y_host();
-	int fd, ret;
+	int conn, ret, status = 0;
 
-	ret = zsock_getaddrinfo(host, "443", &hints, &res);
-	if (ret != 0) {
-		return -EHOSTUNREACH;
+	conn = tedge_http_connect(host, 443, true, 30000);
+	if (conn < 0) {
+		return conn;
 	}
-	fd = zsock_socket(AF_INET, SOCK_STREAM, IPPROTO_TLS_1_2);
-	if (fd < 0) {
-		zsock_freeaddrinfo(res);
-		return -errno;
-	}
-	(void)zsock_setsockopt(fd, ZSOCK_SOL_TLS, ZSOCK_TLS_SEC_TAG_LIST, tags,
-			       sizeof(tags));
-	(void)zsock_setsockopt(fd, ZSOCK_SOL_TLS, ZSOCK_TLS_HOSTNAME, host,
-			       strlen(host) + 1);
-	ret = zsock_connect(fd, res->ai_addr, res->ai_addrlen);
-	zsock_freeaddrinfo(res);
-	if (ret != 0) {
-		ret = -errno;
-		zsock_close(fd);
-		return ret;
-	}
-
 	resp_len = 0;
 	bufs->resp[0] = '\0';
 	resp_status = 0;
-	req.method = HTTP_POST;
-	req.url = path;
-	req.host = host;
-	req.protocol = "HTTP/1.1";
-	req.content_type_value = "application/pkcs10";
-	req.payload = body;
-	req.payload_len = strlen(body);
-	req.header_fields = (auth != NULL) ? headers : NULL;
-	req.response = on_response;
-	req.http_cb = &parser_cb;
-	req.recv_buf = bufs->http_rx;
-	req.recv_buf_len = sizeof(bufs->http_rx);
-	ret = http_client_req(fd, &req, 30000, NULL);
-	zsock_close(fd);
-	return (ret < 0) ? ret : 0;
+	{
+		struct tedge_http_request req = {
+			.method = "POST",
+			.host = host,
+			.path = path,
+			.headers = (auth != NULL) ? headers : NULL,
+			.content_type = "application/pkcs10",
+			.payload = body,
+			.body_len = strlen(body),
+			.on_body = on_body,
+			.buf = bufs->http_rx,
+			.buf_len = sizeof(bufs->http_rx),
+			.timeout_ms = 30000,
+		};
+
+		ret = tedge_http_exchange(conn, &req, &status);
+	}
+	tedge_port_close(conn);
+	resp_status = (uint16_t)status;
+	return ret;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -396,17 +368,8 @@ static int register_credentials(void)
 	key_der_len = ret;
 	key_der = key_der_buf + sizeof(key_der_buf) - key_der_len;
 
-	(void)tls_credential_delete(TEDGE_TAG_DEVICE,
-				    TLS_CREDENTIAL_PUBLIC_CERTIFICATE);
-	(void)tls_credential_delete(TEDGE_TAG_DEVICE, TLS_CREDENTIAL_PRIVATE_KEY);
-	ret = tls_credential_add(TEDGE_TAG_DEVICE,
-				 TLS_CREDENTIAL_PUBLIC_CERTIFICATE, cert_der,
-				 cert_der_len);
-	if (ret == 0) {
-		ret = tls_credential_add(TEDGE_TAG_DEVICE,
-					 TLS_CREDENTIAL_PRIVATE_KEY, key_der,
-					 key_der_len);
-	}
+	ret = tedge_port_tls_set_device(cert_der, cert_der_len, key_der,
+					key_der_len);
 	if (ret != 0) {
 		LOG_ERR("registering the device credentials failed (%d)", ret);
 		return ret;

@@ -38,6 +38,7 @@ if(CONFIG_TEDGE)
   )
   # The HTTP client belongs to every file-transfer feature, not to the first
   # one that needed it.
+  zephyr_library_sources_ifdef(CONFIG_TEDGE_HTTP_CLIENT ${TEDGE_CORE_SRC}/tedge_http.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_HTTP
     ${TEDGE_CORE_SRC}/tedge_http_download.c
     ${TEDGE_CORE_SRC}/tedge_http_upload.c

@@ -1873,3 +1873,311 @@ ZTEST(tedge_fw, test_a_reverted_image_is_reported)
 }
 
 ZTEST_SUITE(tedge_fw, NULL, NULL, NULL, NULL, NULL);
+
+/* ------------------------------------------------------------------------ */
+/* The HTTP client (tedge_http.c)                                            */
+/* ------------------------------------------------------------------------ */
+
+#include "tedge_http.h"
+#include <tedge/port/net.h>
+
+static char http_body[2048];
+static size_t http_body_len;
+static int http_body_status;
+static char http_location[1200];
+static bool http_location_done;
+static int http_body_refuse;
+
+static void http_on_header(const char *name, const char *piece, size_t len,
+			   size_t offset, bool last, void *ctx)
+{
+	ARG_UNUSED(ctx);
+	if (strcmp(name, "location") != 0) {
+		return;
+	}
+	if (offset + len < sizeof(http_location)) {
+		memcpy(http_location + offset, piece, len);
+		http_location[offset + len] = '\0';
+	}
+	if (last) {
+		http_location_done = true;
+	}
+}
+
+static int http_on_body(int status, const void *data, size_t len, void *ctx)
+{
+	ARG_UNUSED(ctx);
+	http_body_status = status;
+	if (http_body_refuse != 0) {
+		return http_body_refuse;
+	}
+	if (http_body_len + len < sizeof(http_body)) {
+		memcpy(http_body + http_body_len, data, len);
+		http_body_len += len;
+		http_body[http_body_len] = '\0';
+	}
+	return 0;
+}
+
+static void http_before(void *fixture)
+{
+	ARG_UNUSED(fixture);
+	http_body[0] = '\0';
+	http_body_len = 0;
+	http_body_status = 0;
+	http_location[0] = '\0';
+	http_location_done = false;
+	http_body_refuse = 0;
+}
+
+/* Feeds @p text in pieces of @p step bytes, as the network might. */
+static int http_feed(struct tedge_http_parser *p, const char *text, size_t step)
+{
+	size_t len = strlen(text);
+
+	for (size_t off = 0; off < len; off += step) {
+		int rc = tedge_http_parse(p, (const uint8_t *)text + off,
+					  MIN(step, len - off));
+
+		if (rc != 0) {
+			return rc;
+		}
+	}
+	return 0;
+}
+
+ZTEST(tedge_http, test_content_length_body)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, http_on_header, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n"
+				 "\r\nhello", 1000));
+	zassert_true(p.done);
+	zassert_equal(p.status, 200);
+	zassert_equal(p.content_length, 5);
+	zassert_str_equal(http_body, "hello");
+}
+
+ZTEST(tedge_http, test_chunked_body_a_byte_at_a_time)
+{
+	struct tedge_http_parser p;
+
+	/* As Cumulocity serves a binary: chunked, with an extension and a
+	 * trailer, and arriving in the smallest pieces possible. */
+	tedge_http_parser_init(&p, http_on_header, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.1 200 OK\r\n"
+				 "Transfer-Encoding: Chunked\r\n\r\n"
+				 "5;name=value\r\nhello\r\n"
+				 "6\r\n world\r\n"
+				 "0\r\nX-Trailer: yes\r\n\r\n", 1));
+	zassert_true(p.done);
+	zassert_str_equal(http_body, "hello world");
+}
+
+ZTEST(tedge_http, test_chunk_sizes_in_hex)
+{
+	struct tedge_http_parser p;
+	static char response[512];
+	char body[0x1a + 1];
+
+	memset(body, 'x', sizeof(body) - 1);
+	body[sizeof(body) - 1] = '\0';
+	snprintf(response, sizeof(response),
+		 "HTTP/1.1 206 Partial Content\r\ntransfer-encoding: chunked\r\n"
+		 "\r\n1A\r\n%s\r\n0\r\n\r\n", body);
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_ok(http_feed(&p, response, 7));
+	zassert_true(p.done);
+	zassert_equal(http_body_len, 0x1a);
+	zassert_equal(http_body_status, 206);
+}
+
+ZTEST(tedge_http, test_long_location_in_pieces)
+{
+	struct tedge_http_parser p;
+	static char response[1400];
+	static char url[1001];
+
+	/* A release asset's redirect: a Location of a kilobyte, longer than
+	 * any buffer the parser has, split across reads. */
+	memset(url, 'a', sizeof(url) - 1);
+	memcpy(url, "https://", 8);
+	url[sizeof(url) - 1] = '\0';
+	snprintf(response, sizeof(response),
+		 "HTTP/1.1 302 Found\r\nLocation: %s\r\nContent-Length: 0\r\n\r\n",
+		 url);
+	tedge_http_parser_init(&p, http_on_header, http_on_body, NULL);
+	zassert_ok(http_feed(&p, response, 100));
+	zassert_true(p.done);
+	zassert_equal(p.status, 302);
+	zassert_true(http_location_done);
+	zassert_str_equal(http_location, url);
+}
+
+ZTEST(tedge_http, test_body_to_close)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.0 200 OK\r\n\r\nuntil the end", 3));
+	zassert_false(p.done, "no length: the body runs to the close");
+	zassert_ok(tedge_http_parse_eof(&p));
+	zassert_str_equal(http_body, "until the end");
+}
+
+ZTEST(tedge_http, test_cut_short)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n"
+				 "short", 100));
+	zassert_equal(tedge_http_parse_eof(&p), -ECONNRESET);
+}
+
+ZTEST(tedge_http, test_no_body_and_interim)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.1 100 Continue\r\n\r\n"
+				 "HTTP/1.1 204 No Content\r\n\r\n", 5));
+	zassert_true(p.done);
+	zassert_equal(p.status, 204);
+	zassert_equal(http_body_len, 0);
+}
+
+ZTEST(tedge_http, test_malformed)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, NULL, NULL, NULL);
+	zassert_equal(http_feed(&p, "SSH-2.0-OpenSSH\r\n", 100), -EBADMSG);
+
+	tedge_http_parser_init(&p, NULL, NULL, NULL);
+	zassert_equal(http_feed(&p, "HTTP/1.1 200 OK\r\nbroken header\r\n",
+				100), -EBADMSG);
+
+	tedge_http_parser_init(&p, NULL, NULL, NULL);
+	zassert_equal(http_feed(&p, "HTTP/1.1 200 OK\r\nTransfer-Encoding: "
+				    "chunked\r\n\r\nzz\r\n", 100), -EBADMSG);
+}
+
+ZTEST(tedge_http, test_body_refused)
+{
+	struct tedge_http_parser p;
+
+	http_body_refuse = -ENOSPC;
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_equal(http_feed(&p, "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n"
+				    "\r\nhello", 100), -ENOSPC);
+}
+
+/* A connection, faked at the port interface: what the client sends is
+ * kept, and the response is handed back a few bytes at a time. */
+static char net_sent[1024];
+static size_t net_sent_len;
+static const char *net_reply;
+static size_t net_reply_off;
+
+int tedge_port_send(int conn, const void *buf, size_t len)
+{
+	ARG_UNUSED(conn);
+	len = MIN(len, sizeof(net_sent) - 1 - net_sent_len);
+	memcpy(net_sent + net_sent_len, buf, len);
+	net_sent_len += len;
+	net_sent[net_sent_len] = '\0';
+	return (int)len;
+}
+
+int tedge_port_recv(int conn, void *buf, size_t len, uint32_t timeout_ms)
+{
+	size_t left = strlen(net_reply) - net_reply_off;
+	size_t n = MIN(MIN(len, left), 7);
+
+	ARG_UNUSED(conn);
+	ARG_UNUSED(timeout_ms);
+	memcpy(buf, net_reply + net_reply_off, n);
+	net_reply_off += n;
+	return (int)n; /* 0 once it is all out: the server closed */
+}
+
+int tedge_port_resolve(const char *host, uint8_t addr[4], uint32_t timeout_ms)
+{
+	ARG_UNUSED(host);
+	ARG_UNUSED(timeout_ms);
+	memset(addr, 0, 4);
+	return 0;
+}
+
+int tedge_port_connect(const uint8_t addr[4], uint16_t port,
+		       enum tedge_port_security security, const char *hostname,
+		       uint32_t timeout_ms)
+{
+	ARG_UNUSED(addr);
+	ARG_UNUSED(port);
+	ARG_UNUSED(security);
+	ARG_UNUSED(hostname);
+	ARG_UNUSED(timeout_ms);
+	return 3;
+}
+
+void tedge_port_close(int conn)
+{
+	ARG_UNUSED(conn);
+}
+
+ZTEST(tedge_http, test_exchange)
+{
+	static const char *const headers[] = { "Accept: application/json\r\n",
+					       NULL };
+	uint8_t buf[64];
+	int status = 0;
+	struct tedge_http_request req = {
+		.method = "POST",
+		.host = "example.cumulocity.com",
+		.path = "/event/events",
+		.headers = headers,
+		.content_type = "application/json",
+		.payload = "{\"a\":1}",
+		.body_len = 7,
+		.on_body = http_on_body,
+		.buf = buf,
+		.buf_len = sizeof(buf),
+		.timeout_ms = 1000,
+	};
+
+	net_sent_len = 0;
+	net_reply_off = 0;
+	net_reply = "HTTP/1.1 201 Created\r\nContent-Length: 8\r\n\r\n{\"id\":1}";
+	zassert_ok(tedge_http_exchange(3, &req, &status));
+	zassert_equal(status, 201);
+	zassert_str_equal(http_body, "{\"id\":1}");
+	zassert_str_equal(net_sent,
+			  "POST /event/events HTTP/1.1\r\n"
+			  "Host: example.cumulocity.com\r\n"
+			  "Accept: application/json\r\n"
+			  "Content-Type: application/json\r\n"
+			  "Content-Length: 7\r\n"
+			  "Connection: close\r\n\r\n"
+			  "{\"a\":1}");
+}
+
+ZTEST(tedge_http, test_exchange_cut_short)
+{
+	uint8_t buf[64];
+	int status = 0;
+	struct tedge_http_request req = {
+		.method = "GET", .host = "h", .path = "/",
+		.on_body = http_on_body, .buf = buf, .buf_len = sizeof(buf),
+		.timeout_ms = 1000,
+	};
+
+	net_sent_len = 0;
+	net_reply_off = 0;
+	net_reply = "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\npart";
+	zassert_equal(tedge_http_exchange(3, &req, &status), -ECONNRESET);
+}
+
+ZTEST_SUITE(tedge_http, NULL, NULL, http_before, NULL, NULL);
