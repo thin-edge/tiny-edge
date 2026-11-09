@@ -62,6 +62,15 @@ jobs:
       - name: Kconfig dependency rules
         working-directory: tiny-edge
         run: bash ports/zephyr/tests/kconfig/check-kconfig.sh ../build-kconfig
+      # Every core file compiled with the host's compiler and C library and
+      # no RTOS at all: what the portability check's patterns cannot see.
+      # mbedTLS 4 keeps half its headers in tf-psa-crypto.
+      - name: The core without an RTOS
+        working-directory: tiny-edge
+        run: |
+          m=../modules/crypto
+          CC=gcc tests/host-compile/run.sh $m/mbedtls/include \
+            $m/tf-psa-crypto/include $m/tf-psa-crypto/drivers/builtin/include
       - name: Twister results
         if: failure()
         uses: actions/upload-artifact@v4

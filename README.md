@@ -85,7 +85,9 @@ Functions a port implements are prefixed `tedge_port_`.
 
 The boundary is checked in CI. `scripts/check-portability.py` fails when
 code in `core/`, `include/tedge/tedge.h`, or `include/tedge/port/` uses an
-RTOS API, or when one port refers to another.
+RTOS API, or when one port refers to another. `tests/host-compile/` compiles every
+core file with the host's compiler and C library against a port that has
+only types, which catches what the script's patterns miss.
 
 ## The public API
 
