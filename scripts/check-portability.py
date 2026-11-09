@@ -14,11 +14,6 @@ Rules:
 2. A port never reaches into another port (ports/<a> must not name ports/<b>).
 3. Nothing reaches outside the repository with "../" paths.
 
-The core was extracted from the Zephyr-only client, so some of its files
-still break rule 1. They are listed in KNOWN_RTOS_BOUND. The list may only
-shrink: a listed file that has become clean fails the check, so whoever
-cleaned it also takes it off the list.
-
 Documentation (*.md) is not checked.
 
 Exit status is 0 when clean, 1 when any rule is broken.
@@ -29,14 +24,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-
-# Core files that still use Zephyr directly. Remove an entry when its file
-# moves its RTOS calls behind the port interface. Never add one.
-KNOWN_RTOS_BOUND = {
-    "core/src/tedge_firmware.c",
-    "core/src/tedge_internal.h",
-    "include/tedge/tedge.h",
-}
 
 # Headers of the RTOSes and vendor SDKs the client runs on or may run on.
 RTOS_HEADER = re.compile(
@@ -91,7 +78,7 @@ def check_file(path: Path) -> list[str]:
         return []
     problems = []
 
-    if is_portable(rel) and rel not in KNOWN_RTOS_BOUND:
+    if is_portable(rel):
         for lineno, line in enumerate(text.splitlines(), start=1):
             if rtos_api(line):
                 problems.append(f"{rel}:{lineno}: RTOS API in portable code: "
@@ -123,22 +110,12 @@ def main() -> int:
             continue
         problems.extend(check_file(path))
 
-    for rel in sorted(KNOWN_RTOS_BOUND):
-        path = ROOT / rel
-        if not path.exists():
-            problems.append(f"{rel}: listed in KNOWN_RTOS_BOUND but gone; "
-                            "remove the entry")
-        elif not rtos_bound(path.read_text(encoding="utf-8")):
-            problems.append(f"{rel}: now portable; remove it from "
-                            "KNOWN_RTOS_BOUND")
-
     for problem in problems:
         print(problem)
     if problems:
         print(f"{len(problems)} problem(s)")
         return 1
-    print(f"core is portable apart from {len(KNOWN_RTOS_BOUND)} known "
-          "file(s); ports are independent")
+    print("core is portable; ports are independent")
     return 0
 
 

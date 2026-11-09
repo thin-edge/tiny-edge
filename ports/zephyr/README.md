@@ -676,9 +676,9 @@ failure on hardware: which counters to trust, the two ESP32 allocation
 failures that look alike, and the measurement traps that make a broken
 session look healthy.
 
-Some files in `core/` still call Zephyr directly; they are moving behind the
-port interface (`include/tedge/port/`) one at a time. `scripts/check-portability.py` lists them and
-stops new ones from appearing.
+The core (`core/`) calls nothing in Zephyr: everything it needs from the
+RTOS goes through the port interface (`include/tedge/port/`), which this
+directory implements. `scripts/check-portability.py` keeps it that way.
 
 ## Version
 

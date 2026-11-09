@@ -19,13 +19,11 @@
 #include "tedge_internal.h"
 #include "tedge_util.h"
 
+#include <tedge/port/firmware.h>
 #include <tedge/port/kv.h>
 #include <tedge/port/log.h>
 #include <tedge/port/os.h>
 
-#include <zephyr/dfu/flash_img.h>
-#include <zephyr/dfu/mcuboot.h>
-#include <zephyr/storage/flash_map.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -43,7 +41,6 @@ struct pending {
 };
 
 static struct pending job;
-static struct flash_img_context flash_ctx;
 static int64_t image_total;
 static int64_t last_progress_at;
 static int last_progress_percent;
@@ -78,14 +75,10 @@ int tedge_fw_poll_event(struct tedge_fw_event *ev)
 
 int tedge_fw_running_version(char *buf, size_t len)
 {
-	struct mcuboot_img_header hdr;
 	char header[16] = "";
 
-	if (boot_read_bank_header(PARTITION_ID(slot0_partition), &hdr,
-				  sizeof(hdr)) == 0) {
-		snprintf(header, sizeof(header), "%u.%u.%u",
-			 hdr.h.v1.sem_ver.major, hdr.h.v1.sem_ver.minor,
-			 hdr.h.v1.sem_ver.revision);
+	if (tedge_port_fw_running_version(header, sizeof(header)) != 0) {
+		header[0] = '\0';
 	}
 	return tedge_fw_version_pick(tedge_identity()->firmware_version, header,
 				     buf, len);
@@ -222,8 +215,7 @@ static int64_t size_load(void)
 static int write_sink(const void *data, size_t len, void *user_data)
 {
 	TEDGE_UNUSED(user_data);
-	int ret = flash_img_buffered_write(&flash_ctx, (const uint8_t *)data,
-					   len, false);
+	int ret = tedge_port_fw_write(data, len);
 
 	if (ret != 0) {
 		TEDGE_LOG_ERR("firmware: writing to the slot failed (%d)", ret);
@@ -288,12 +280,12 @@ static void download_thread(void *arg)
 	/* The first message waits for the response headers, so that it can
 	 * state the size like every other one. */
 
-	ret = flash_img_init(&flash_ctx);
+	ret = tedge_port_fw_begin();
 	if (ret == 0) {
 		ret = tedge_download(&dl_req);
 	}
 	if (ret == 0) {
-		ret = flash_img_buffered_write(&flash_ctx, NULL, 0, true);
+		ret = tedge_port_fw_finish();
 	}
 	if (ret != 0) {
 		publish_progress("failed", -1, 0, "download failed");
@@ -309,7 +301,7 @@ static void download_thread(void *arg)
 	/* From here the device is about to go dark for the swap. */
 	marker_save(job.name, job.version, dl_req.total ? dl_req.total
 							: dl_req.written);
-	ret = boot_request_upgrade(BOOT_UPGRADE_TEST);
+	ret = tedge_port_fw_request_trial();
 	if (ret != 0) {
 		marker_clear();
 		publish_progress("failed", -1, 0, "could not request the update");
@@ -331,7 +323,7 @@ static void download_thread(void *arg)
  * bootloader never gets to roll it back. */
 static void confirm_deadline_fn(void)
 {
-	if (boot_is_img_confirmed()) {
+	if (tedge_port_fw_is_confirmed()) {
 		return;
 	}
 	TEDGE_LOG_ERR("firmware: this image has not confirmed itself within %d s; "
@@ -345,7 +337,7 @@ TEDGE_PORT_DELAYED_WORK_DEFINE(confirm_deadline, confirm_deadline_fn);
 void tedge_fw_arm_confirm_deadline(void)
 {
 	if (TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S == 0 ||
-	    boot_is_img_confirmed()) {
+	    tedge_port_fw_is_confirmed()) {
 		return;
 	}
 	TEDGE_LOG_INF("firmware: running an unconfirmed image; it has %d s to "
@@ -416,7 +408,7 @@ void tedge_fw_on_connected(void)
 {
 	const struct tedge_hooks *hooks = tedge_hook_table();
 	char version[24] = "";
-	bool confirmed = boot_is_img_confirmed();
+	bool confirmed = tedge_port_fw_is_confirmed();
 	char *sep;
 
 	if (marker[0] == '\0') {
@@ -468,8 +460,8 @@ void tedge_fw_on_connected(void)
 			return; /* leave it unconfirmed on purpose */
 		}
 	}
-	if (IS_ENABLED(TEDGE_FIRMWARE_CONFIRM_AFTER_CONNECT)) {
-		int rc = boot_write_img_confirmed();
+	if (TEDGE_IS_ENABLED(TEDGE_FIRMWARE_CONFIRM_AFTER_CONNECT)) {
+		int rc = tedge_port_fw_confirm();
 
 		if (rc != 0) {
 			TEDGE_LOG_ERR("firmware: could not confirm the image (%d)", rc);

@@ -17,6 +17,7 @@ if(CONFIG_TEDGE)
   zephyr_library_sources(
     ${TEDGE_CORE_SRC}/tedge_version.c
     ${TEDGE_CORE_SRC}/tedge_core.c
+    ${TEDGE_CORE_SRC}/tedge_absent.c
     ${TEDGE_CORE_SRC}/tedge_device.c
     src/tedge_platform.c
     src/tedge_port.c
@@ -48,6 +49,7 @@ if(CONFIG_TEDGE)
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_FIRMWARE_UPDATE
     ${TEDGE_CORE_SRC}/tedge_firmware.c
+    src/tedge_port_fw.c
     ${TEDGE_CORE_SRC}/tedge_fw_decision.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_SHELL_COMMAND

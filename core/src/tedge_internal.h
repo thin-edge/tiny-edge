@@ -19,7 +19,6 @@
 #include <tedge/port/config.h>
 #include <tedge/port/time.h>
 
-#include <zephyr/kernel.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -55,11 +54,11 @@ const struct tedge_id *tedge_identity(void);
 const struct tedge_hooks *tedge_hook_table(void);
 void tedge_set_state(enum tedge_state state);
 
-/** The module's bounded heap (CONFIG_TEDGE_HEAP_SIZE). */
+/** The module's bounded heap (TEDGE_HEAP_SIZE). */
 void *tedge_alloc(size_t size);
 void tedge_free(void *p);
 
-/** Cumulocity tenant host: settings override, else CONFIG_TEDGE_C8Y_URL. */
+/** Cumulocity tenant host: settings override, else TEDGE_C8Y_URL. */
 const char *tedge_c8y_host(void);
 int tedge_c8y_host_set(const char *host);
 
@@ -255,7 +254,7 @@ const char *tedge_params_set_name(size_t index, size_t *count);
 
 /* The client's own tunables (tedge_self_params.c). Each is read where its
  * value is used, so a change needs nothing to be notified. Without
- * CONFIG_TEDGE_PARAMETERS_SELF the Kconfig value is used directly. */
+ * TEDGE_PARAMETERS_SELF the build's value is used directly. */
 void tedge_self_params_declare(void);
 int tedge_self_health_interval_s(void);
 int tedge_self_required_interval_min(void);
@@ -278,10 +277,10 @@ bool tedge_operation_from_json(const char *json, char *line, size_t len);
 
 /* --- Shell command (tedge_shell_cmd.c) ----------------------------------- */
 
-#if defined(CONFIG_TEDGE_SHELL_COMMAND)
+#if defined(TEDGE_SHELL_COMMAND)
 struct tedge_shell_event {
 	int rc; /* 0 when the command ran and returned success */
-	char output[CONFIG_TEDGE_SHELL_COMMAND_OUTPUT_BYTES];
+	char output[TEDGE_SHELL_COMMAND_OUTPUT_BYTES];
 };
 
 /** Start the command a "511,…" line asks for. */
@@ -554,10 +553,5 @@ const char *tedge_auth_password(void);
  * swap, which may be older code. */
 #define TEDGE_KEY_FIRMWARE_SIZE  TEDGE_SETTINGS_ROOT "/firmware_size"
 #define TEDGE_KEY_FIRMWARE_OP    TEDGE_SETTINGS_ROOT "/firmware_op"
-
-/* --- TLS credential tags ------------------------------------------------- */
-
-#define TEDGE_TAG_SERVER_CA (CONFIG_TEDGE_TLS_TAG_BASE + 0)
-#define TEDGE_TAG_DEVICE    (CONFIG_TEDGE_TLS_TAG_BASE + 1)
 
 #endif /* TEDGE_INTERNAL_H_ */

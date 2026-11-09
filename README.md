@@ -81,15 +81,11 @@ Functions a port implements are prefixed `tedge_port_`.
 | `kv.h` | Persistent key-value storage: the tenant, credentials, parameter values, the state of an update |
 | `net.h` | Whether the network is up, name lookup, TCP and TLS streams, UDP, and the TLS credentials |
 | `crypto.h` | The device key (generated once, never handed out), a certificate request signed with it, and random bytes |
-
-Firmware slots are added the same way
-as the core files that use them move behind the interface.
+| `firmware.h` | The update slot: write a new image, boot it on trial, confirm it, and the running image's version |
 
 The boundary is checked in CI. `scripts/check-portability.py` fails when
 code in `core/`, `include/tedge/tedge.h`, or `include/tedge/port/` uses an
-RTOS API, or when one port refers to another. The core came from a Zephyr-only client, so some of
-its files still call Zephyr directly. The script lists them, and the list
-can only get shorter.
+RTOS API, or when one port refers to another.
 
 ## The public API
 
