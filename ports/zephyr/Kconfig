@@ -546,12 +546,9 @@ config TEDGE_REMOTE_ACCESS
 	  passthrough) to a TCP target: the device itself or another host on
 	  its network, within the target policy below. Each session holds one
 	  TLS connection while it is open. Requires certificate authentication.
-	select TEDGE_HTTP
-	select WEBSOCKET_CLIENT
-	select HTTP_CLIENT
-	# websocket_connect() hashes Sec-WebSocket-Accept with PSA SHA-1 but
-	# does not select it; without this it fails with -EPROTO.
-	select PSA_WANT_ALG_SHA_1
+	# The tunnel's WebSocket (core/src/tedge_ws.c) opens with an HTTP
+	# upgrade request.
+	select TEDGE_HTTP_CLIENT
 
 if TEDGE_REMOTE_ACCESS
 

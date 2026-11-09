@@ -45,6 +45,10 @@ struct tedge_http_parser {
 	/** Content-Length, or -1 when the response has none. */
 	int64_t content_length;
 	bool done;
+	/** Bytes of the last tedge_http_parse() call that belong to this
+	 *  response. After a 101 (Switching Protocols) the rest are the new
+	 *  protocol's. */
+	size_t used;
 
 	/* internal */
 	uint8_t state;
@@ -64,7 +68,8 @@ void tedge_http_parser_init(struct tedge_http_parser *p,
 			    tedge_http_body_fn on_body, void *ctx);
 
 /**
- * Feed @p len bytes of the response.
+ * Feed @p len bytes of the response. A 101 response ends with its headers:
+ * the connection speaks another protocol from there on.
  *
  * @return 0 while more is expected or once the response is complete
  *         (p->done); -EBADMSG for a malformed response; or the body

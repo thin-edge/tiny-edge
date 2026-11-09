@@ -2079,6 +2079,7 @@ ZTEST(tedge_http, test_body_refused)
 static char net_sent[1024];
 static size_t net_sent_len;
 static const char *net_reply;
+static size_t net_reply_len;
 static size_t net_reply_off;
 
 int tedge_port_send(int conn, const void *buf, size_t len)
@@ -2093,7 +2094,7 @@ int tedge_port_send(int conn, const void *buf, size_t len)
 
 int tedge_port_recv(int conn, void *buf, size_t len, uint32_t timeout_ms)
 {
-	size_t left = strlen(net_reply) - net_reply_off;
+	size_t left = net_reply_len - net_reply_off;
 	size_t n = MIN(MIN(len, left), 7);
 
 	ARG_UNUSED(conn);
@@ -2151,6 +2152,7 @@ ZTEST(tedge_http, test_exchange)
 	net_sent_len = 0;
 	net_reply_off = 0;
 	net_reply = "HTTP/1.1 201 Created\r\nContent-Length: 8\r\n\r\n{\"id\":1}";
+	net_reply_len = strlen(net_reply);
 	zassert_ok(tedge_http_exchange(3, &req, &status));
 	zassert_equal(status, 201);
 	zassert_str_equal(http_body, "{\"id\":1}");
@@ -2177,7 +2179,134 @@ ZTEST(tedge_http, test_exchange_cut_short)
 	net_sent_len = 0;
 	net_reply_off = 0;
 	net_reply = "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\npart";
+	net_reply_len = strlen(net_reply);
 	zassert_equal(tedge_http_exchange(3, &req, &status), -ECONNRESET);
 }
 
 ZTEST_SUITE(tedge_http, NULL, NULL, http_before, NULL, NULL);
+
+/* ------------------------------------------------------------------------ */
+/* The WebSocket client (tedge_ws.c)                                         */
+/* ------------------------------------------------------------------------ */
+
+#include "tedge_ws.h"
+
+ZTEST(tedge_ws, test_accept_key)
+{
+	/* RFC 6455 section 1.3's example. */
+	static const char keyed[] = "dGhlIHNhbXBsZSBub25jZQ=="
+				    "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+	uint8_t digest[20];
+	char accept[32];
+
+	tedge_sha1(keyed, strlen(keyed), digest);
+	zassert_equal(tedge_base64_encode(digest, sizeof(digest), accept,
+					  sizeof(accept)), 28);
+	zassert_str_equal(accept, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
+}
+
+ZTEST(tedge_ws, test_sha1_and_base64_edges)
+{
+	/* Two blocks of padding, and base64 with one and two '='. */
+	static const char abc[] = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmn"
+				  "lmnomnopnopq";
+	static const uint8_t want[20] = {
+		0x84, 0x98, 0x3e, 0x44, 0x1c, 0x3b, 0xd2, 0x6e, 0xba, 0xae,
+		0x4a, 0xa1, 0xf9, 0x51, 0x29, 0xe5, 0xe5, 0x46, 0x70, 0xf1,
+	};
+	uint8_t digest[20];
+	char out[8];
+
+	tedge_sha1(abc, strlen(abc), digest);
+	zassert_mem_equal(digest, want, sizeof(want));
+	zassert_equal(tedge_base64_encode((const uint8_t *)"a", 1, out,
+					  sizeof(out)), 4);
+	zassert_str_equal(out, "YQ==");
+	zassert_equal(tedge_base64_encode((const uint8_t *)"ab", 2, out,
+					  sizeof(out)), 4);
+	zassert_str_equal(out, "YWI=");
+	zassert_equal(tedge_base64_encode((const uint8_t *)"abcdef", 6, out, 8),
+		      -ENOSPC);
+}
+
+/* A session already open, reading what the fake connection hands over. */
+static void ws_open(struct tedge_ws *ws, uint8_t *rx, size_t cap,
+		    const char *reply, size_t reply_len)
+{
+	static char script[256];
+
+	memset(ws, 0, sizeof(*ws));
+	ws->conn = 3;
+	ws->rx = rx;
+	ws->rx_cap = cap;
+	memcpy(script, reply, reply_len);
+	net_reply = script;
+	net_reply_len = reply_len;
+	net_reply_off = 0;
+	net_sent_len = 0;
+}
+
+ZTEST(tedge_ws, test_receive_frames)
+{
+	/* "hel" unmasked, a ping with "p" between, "lo" masked with a key of
+	 * 1,2,3,4, then the server's close (1000). */
+	static const char reply[] = "\x82\x03hel"
+				    "\x89\x01p"
+				    "\x82\x82\x01\x02\x03\x04" "\x6d\x6d"
+				    "\x88\x02\x03\xe8";
+	struct tedge_ws ws;
+	uint8_t rx[16];
+	uint8_t buf[16];
+	size_t got = 0;
+	int n;
+
+	ws_open(&ws, rx, sizeof(rx), reply, sizeof(reply) - 1);
+	while ((n = tedge_ws_recv(&ws, buf + got, sizeof(buf) - got, 0)) > 0) {
+		got += n;
+	}
+	zassert_equal(n, -ENOTCONN, "the close is reported");
+	zassert_equal(got, 5);
+	zassert_mem_equal(buf, "hello", 5);
+
+	/* The ping was answered with a masked pong of the same payload, and
+	 * the close was echoed. */
+	zassert_true(net_sent_len >= 7 + 8);
+	zassert_equal((uint8_t)net_sent[0], 0x8A, "FIN + pong");
+	zassert_equal((uint8_t)net_sent[1], 0x81, "masked, 1 byte");
+	zassert_equal((uint8_t)net_sent[6] ^ (uint8_t)net_sent[2], 'p');
+	zassert_equal((uint8_t)net_sent[7], 0x88, "FIN + close");
+}
+
+ZTEST(tedge_ws, test_send_masks_and_sizes)
+{
+	static uint8_t big[300];
+	struct tedge_ws ws;
+	uint8_t rx[16];
+
+	ws_open(&ws, rx, sizeof(rx), "", 0);
+	memset(big, 'x', sizeof(big));
+	zassert_ok(tedge_ws_send(&ws, big, sizeof(big)));
+	zassert_equal(net_sent_len, 2 + 2 + 4 + sizeof(big));
+	zassert_equal((uint8_t)net_sent[0], 0x82, "FIN + binary");
+	zassert_equal((uint8_t)net_sent[1], 0x80 | 126, "masked, 16-bit length");
+	zassert_equal(((uint8_t)net_sent[2] << 8) | (uint8_t)net_sent[3],
+		      sizeof(big));
+	for (size_t i = 0; i < sizeof(big); i++) {
+		zassert_equal((uint8_t)net_sent[8 + i] ^
+				      (uint8_t)net_sent[4 + (i & 3)],
+			      'x');
+	}
+}
+
+ZTEST(tedge_ws, test_control_frame_too_long)
+{
+	static const char reply[] = "\x89\x7e\x00\x80";
+	struct tedge_ws ws;
+	uint8_t rx[16];
+	uint8_t buf[16];
+
+	ws_open(&ws, rx, sizeof(rx), reply, sizeof(reply) - 1);
+	zassert_equal(tedge_ws_recv(&ws, buf, sizeof(buf), 0), -EPROTO);
+}
+
+ZTEST_SUITE(tedge_ws, NULL, NULL, NULL, NULL, NULL);

@@ -22,7 +22,6 @@
 #ifndef TEDGE_TEDGE_H_
 #define TEDGE_TEDGE_H_
 
-#include <zephyr/net/net_ip.h> /* struct sockaddr, for remote-access targets */
 #include <zephyr/toolchain.h>
 
 #include <errno.h>
@@ -79,7 +78,10 @@ struct tedge_identity {
  * @brief Remote-access target, passed to tedge_hooks::remote_access_allow.
  */
 struct tedge_remote_target {
-	const struct sockaddr *addr;
+	/** The host as the operator named it: a name, or a dotted address. */
+	const char *host;
+	/** What it resolved to: an IPv4 address, in network order. */
+	uint8_t ipv4[4];
 	uint16_t port;
 };
 

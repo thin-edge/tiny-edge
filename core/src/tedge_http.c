@@ -104,6 +104,12 @@ static void header_done(struct tedge_http_parser *p)
 /* The blank line after the headers: decide how the body is delimited. */
 static int headers_done(struct tedge_http_parser *p)
 {
+	if (p->status == 101) {
+		/* Switching protocols: what follows is not HTTP. */
+		p->state = S_DONE;
+		p->done = true;
+		return 0;
+	}
 	if (p->status >= 100 && p->status < 200) {
 		/* An interim response: the real one follows. */
 		p->state = S_STATUS;
@@ -153,6 +159,7 @@ int tedge_http_parse(struct tedge_http_parser *p, const uint8_t *data,
 {
 	size_t i = 0;
 
+	p->used = 0;
 	if (p->rc != 0) {
 		return p->rc;
 	}
@@ -344,6 +351,7 @@ int tedge_http_parse(struct tedge_http_parser *p, const uint8_t *data,
 		}
 	}
 	p->done = (p->state == S_DONE);
+	p->used = i;
 	return 0;
 }
 
