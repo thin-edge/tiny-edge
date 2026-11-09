@@ -27,8 +27,6 @@
 #include <tedge/port/os.h>
 #include <tedge/port/time.h>
 
-#include <zephyr/sys/timeutil.h>
-
 #include <mbedtls/x509_crt.h>
 
 #include <errno.h>
@@ -65,7 +63,7 @@ static time_t to_epoch(const mbedtls_x509_time *t)
 		.tm_sec = t->sec,
 	};
 
-	return (time_t)timeutil_timegm64(&tm);
+	return tedge_timegm(&tm);
 }
 
 static int read_expiry(time_t *expires)

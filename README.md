@@ -42,8 +42,10 @@ tiny-edge/
 
 ## How the code is split
 
-**`core/`** holds everything that does not depend on the RTOS. It uses C99,
-the client's own headers, and the port interface. It has no RTOS headers and
+**`core/`** holds everything that does not depend on the RTOS. It uses C,
+the client's own headers, and the port interface, and speaks MQTT, HTTP,
+and WebSocket itself. For parsing certificates and ASN.1 it uses mbedTLS as
+a plain C library; anything that needs the device's key is the port's. It has no RTOS headers and
 no Kconfig symbols. Features are switched with `TEDGE_*` macros from a
 configuration header, so the core builds the same way everywhere.
 
@@ -78,8 +80,9 @@ Functions a port implements are prefixed `tedge_port_`.
 | `device.h` | The MAC address, the reset and its cause, and crash dumps |
 | `kv.h` | Persistent key-value storage: the tenant, credentials, parameter values, the state of an update |
 | `net.h` | Whether the network is up, name lookup, TCP and TLS streams, UDP, and the TLS credentials |
+| `crypto.h` | The device key (generated once, never handed out), a certificate request signed with it, and random bytes |
 
-Crypto and firmware slots are added the same way
+Firmware slots are added the same way
 as the core files that use them move behind the interface.
 
 The boundary is checked in CI. `scripts/check-portability.py` fails when

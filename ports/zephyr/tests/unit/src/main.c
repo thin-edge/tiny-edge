@@ -2502,3 +2502,28 @@ ZTEST(tedge_mqtt, test_publish)
 }
 
 ZTEST_SUITE(tedge_mqtt, NULL, NULL, mqtt_before, NULL, NULL);
+
+/* ------------------------------------------------------------------------ */
+/* Dates (tedge_codec.c)                                                     */
+/* ------------------------------------------------------------------------ */
+
+static time_t utc(int year, int mon, int day, int h, int m, int s)
+{
+	struct tm tm = { .tm_year = year - 1900, .tm_mon = mon - 1,
+			 .tm_mday = day, .tm_hour = h, .tm_min = m, .tm_sec = s };
+
+	return tedge_timegm(&tm);
+}
+
+ZTEST(tedge_codec, test_timegm)
+{
+	zassert_equal(utc(1970, 1, 1, 0, 0, 0), 0);
+	zassert_equal(utc(2000, 2, 29, 12, 0, 0), 951825600);
+	zassert_equal(utc(2000, 3, 1, 0, 0, 0), 951868800);
+	zassert_equal(utc(2026, 9, 20, 10, 15, 0), 1789899300);
+	/* Past 2038, as a certificate's notAfter can be. */
+	zassert_equal(utc(2038, 1, 19, 3, 14, 8), (time_t)2147483648LL);
+	zassert_equal(utc(2100, 3, 1, 0, 0, 0), (time_t)4107542400LL);
+}
+
+ZTEST_SUITE(tedge_codec, NULL, NULL, NULL, NULL, NULL);

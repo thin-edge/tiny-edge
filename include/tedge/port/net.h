@@ -71,10 +71,10 @@ bool tedge_port_net_on_subnet(const uint8_t addr[4]);
  *  included. @return 0, or a negative errno. */
 int tedge_port_tls_set_ca(const void *pem, size_t len);
 
-/** The device's own certificate and private key, both DER, replacing any
- *  earlier pair. @return 0, or a negative errno. */
-int tedge_port_tls_set_device(const void *cert, size_t cert_len,
-			      const void *key, size_t key_len);
+/** The device's own certificate, DER, replacing any earlier one. The
+ *  port presents it with the device key (crypto.h), which it keeps.
+ *  @return 0, or a negative errno. */
+int tedge_port_tls_set_device(const void *cert, size_t cert_len);
 
 /** Forget the device's certificate and key. */
 void tedge_port_tls_clear_device(void);

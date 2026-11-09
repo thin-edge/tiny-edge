@@ -7,6 +7,8 @@
 
 #include <tedge/port/net.h>
 
+#include "tedge_port_zephyr.h"
+
 #include <zephyr/kernel.h>
 #include <zephyr/net/dns_resolve.h>
 #include <zephyr/net/net_event.h>
@@ -174,9 +176,6 @@ bool tedge_port_net_on_subnet(const uint8_t addr[4])
 
 /* --- TLS credentials ----------------------------------------------------- */
 
-/* One security tag per role, from CONFIG_TEDGE_TLS_TAG_BASE up. */
-#define TAG_SERVER_CA (CONFIG_TEDGE_TLS_TAG_BASE + 0)
-#define TAG_DEVICE    (CONFIG_TEDGE_TLS_TAG_BASE + 1)
 
 int tedge_port_tls_set_ca(const void *pem, size_t len)
 {
@@ -184,29 +183,6 @@ int tedge_port_tls_set_ca(const void *pem, size_t len)
 				    TLS_CREDENTIAL_CA_CERTIFICATE);
 	return tls_credential_add(TAG_SERVER_CA, TLS_CREDENTIAL_CA_CERTIFICATE,
 				  pem, len);
-}
-
-void tedge_port_tls_clear_device(void)
-{
-	(void)tls_credential_delete(TAG_DEVICE,
-				    TLS_CREDENTIAL_PUBLIC_CERTIFICATE);
-	(void)tls_credential_delete(TAG_DEVICE, TLS_CREDENTIAL_PRIVATE_KEY);
-}
-
-int tedge_port_tls_set_device(const void *cert, size_t cert_len,
-			      const void *key, size_t key_len)
-{
-	int ret;
-
-	tedge_port_tls_clear_device();
-	ret = tls_credential_add(TAG_DEVICE, TLS_CREDENTIAL_PUBLIC_CERTIFICATE,
-				 cert, cert_len);
-	if (ret == 0) {
-		ret = tls_credential_add(TAG_DEVICE,
-					 TLS_CREDENTIAL_PRIVATE_KEY, key,
-					 key_len);
-	}
-	return ret;
 }
 
 /* --- Connections --------------------------------------------------------- */

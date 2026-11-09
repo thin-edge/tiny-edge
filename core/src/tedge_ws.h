@@ -80,11 +80,4 @@ int tedge_ws_recv(struct tedge_ws *ws, uint8_t *buf, size_t len,
 /** Send a normal close (1000). Best effort; the caller closes @p conn. */
 void tedge_ws_close(struct tedge_ws *ws);
 
-/** SHA-1 of @p len bytes into @p digest. For the handshake only. */
-void tedge_sha1(const void *data, size_t len, uint8_t digest[20]);
-
-/** Base64 of @p len bytes into @p out, NUL-terminated.
- *  @return The length written, or -ENOSPC. */
-int tedge_base64_encode(const uint8_t *in, size_t len, char *out, size_t cap);
-
 #endif /* TEDGE_WS_H_ */

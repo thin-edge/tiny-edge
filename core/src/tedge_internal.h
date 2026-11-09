@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <time.h>
 
 /** Resolved identity: the application's values with the defaults applied. */
 struct tedge_id {
@@ -76,6 +77,20 @@ _Noreturn void tedge_device_reset(void);
 
 /** "<TEDGE_DEVICE_ID_PREFIX>-<MAC>" into @p buf (tedge_device.c). */
 int tedge_default_device_id(char *buf, size_t len);
+
+/* --- Encodings (tedge_codec.c) ------------------------------------------ */
+
+/** SHA-1 of @p len bytes into @p digest. For the WebSocket handshake, never
+ *  for anything secret. */
+void tedge_sha1(const void *data, size_t len, uint8_t digest[20]);
+
+/** Base64 of @p len bytes into @p out, NUL-terminated.
+ *  @return The length written, or -ENOSPC. */
+int tedge_base64_encode(const uint8_t *in, size_t len, char *out, size_t cap);
+
+/** Seconds since the epoch for @p tm, read as UTC (the standard library has
+ *  no timegm()). Only the date and time fields are read. */
+time_t tedge_timegm(const struct tm *tm);
 
 /* --- SmartREST helpers (tedge_smartrest.c) ------------------------------- */
 
