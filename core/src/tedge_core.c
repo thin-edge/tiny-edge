@@ -13,16 +13,16 @@
  */
 
 #include "tedge_internal.h"
+#include "tedge_util.h"
+
+#include <tedge/port/kv.h>
+#include <tedge/port/os.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/net_event.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_mgmt.h>
-#include <zephyr/random/random.h>
-#include <zephyr/settings/settings.h>
-#include <zephyr/sys/atomic.h>
-#include <zephyr/init.h>
 
 #include <errno.h>
 #include <stdio.h>
@@ -40,41 +40,17 @@ LOG_MODULE_REGISTER(tedge, CONFIG_TEDGE_LOG_LEVEL);
  * slot", 2026-09-23). 36 B of RAM each. */
 #define TWIN_SLOTS    (TEDGE_PARAM_MAX_SETS + 2 + 2)
 
-/* The client's private heap. By default its memory is ordinary .bss rather
- * than what K_HEAP_DEFINE() uses (.noinit): on the classic ESP32 .noinit
- * lands in dram1, the 96 KB region that also holds every thread stack and
- * the network buffers, while .bss goes to dram0, where the libc malloc arena
- * gets whatever is left. Moving the 10-16 KB heap across is what lets the
- * ESP32-CAM carry log upload (reduce-memory-footprint, 2026-09-23). A board
- * whose dram0 is the full one (the WROOM-32, mbedTLS heap in dram0) keeps it
- * in .noinit with CONFIG_TEDGE_HEAP_NOINIT. On SoCs with one RAM region
- * nothing moves either way. */
-#if defined(CONFIG_TEDGE_HEAP_NOINIT)
-K_HEAP_DEFINE(tedge_heap, CONFIG_TEDGE_HEAP_SIZE);
-#else
-static uint8_t __aligned(8) tedge_heap_mem[CONFIG_TEDGE_HEAP_SIZE];
-static struct k_heap tedge_heap;
-
-/* Before the application runs, so the heap is ready before tedge_init(). */
-static int tedge_heap_init(void)
-{
-	k_heap_init(&tedge_heap, tedge_heap_mem, sizeof(tedge_heap_mem));
-	return 0;
-}
-SYS_INIT(tedge_heap_init, POST_KERNEL, 0);
-#endif
-
 static struct tedge_id identity;
 static const struct tedge_hooks *hooks;
-static atomic_t state = ATOMIC_INIT(TEDGE_STATE_STOPPED);
+static tedge_port_atomic_t state = TEDGE_PORT_ATOMIC_INIT(TEDGE_STATE_STOPPED);
 static bool initialised;
 
-static K_EVENT_DEFINE(events);
-#define EV_NET_UP   BIT(0)
-#define EV_NET_DOWN BIT(1)
-#define EV_STOP     BIT(2)
-#define EV_WAKE     BIT(3)
-#define EV_RECONNECT BIT(4)
+TEDGE_PORT_EVENT_DEFINE(events);
+#define EV_NET_UP    (1u << 0)
+#define EV_NET_DOWN  (1u << 1)
+#define EV_STOP      (1u << 2)
+#define EV_WAKE      (1u << 3)
+#define EV_RECONNECT (1u << 4)
 
 static struct net_mgmt_event_callback l4_cb;
 static char c8y_host[80];
@@ -84,7 +60,7 @@ static struct {
 	char fragment[32];
 	char *json; /* module heap */
 } twin[TWIN_SLOTS];
-static K_MUTEX_DEFINE(twin_lock);
+TEDGE_PORT_MUTEX_DEFINE(twin_lock);
 static bool twin_dirty;
 
 /* ------------------------------------------------------------------------ */
@@ -93,23 +69,19 @@ static bool twin_dirty;
 
 void *tedge_alloc(size_t size)
 {
-	void *p = k_heap_alloc(&tedge_heap, size, K_NO_WAIT);
+	void *p = tedge_port_heap_alloc(size);
 
 	if (p == NULL) {
 		LOG_ERR("out of client heap (%zu B wanted of %d B; raise "
-			"CONFIG_TEDGE_HEAP_SIZE)", size, CONFIG_TEDGE_HEAP_SIZE);
+			TEDGE_CONFIG_NAME(TEDGE_HEAP_SIZE) ")", size,
+			TEDGE_HEAP_SIZE);
 	}
 	return p;
 }
 
 size_t tedge_heap_free(void)
 {
-	struct sys_memory_stats stats;
-
-	if (sys_heap_runtime_stats_get(&tedge_heap.heap, &stats) != 0) {
-		return 0;
-	}
-	return stats.free_bytes;
+	return tedge_port_heap_free_bytes();
 }
 
 /* JSON has few escapes; anything else that would break a payload becomes a
@@ -134,9 +106,7 @@ void tedge_json_escape(const char *in, char *out, size_t len)
 
 void tedge_free(void *p)
 {
-	if (p != NULL) {
-		k_heap_free(&tedge_heap, p);
-	}
+	tedge_port_heap_free(p);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -155,7 +125,7 @@ static const char *state_name(enum tedge_state s)
 
 void tedge_set_state(enum tedge_state s)
 {
-	if ((enum tedge_state)atomic_set(&state, s) == s) {
+	if ((enum tedge_state)tedge_port_atomic_set(&state, s) == s) {
 		return;
 	}
 	LOG_INF("state: %s", state_name(s));
@@ -166,7 +136,7 @@ void tedge_set_state(enum tedge_state s)
 
 enum tedge_state tedge_get_state(void)
 {
-	return (enum tedge_state)atomic_get(&state);
+	return (enum tedge_state)tedge_port_atomic_get(&state);
 }
 
 const struct tedge_id *tedge_identity(void)
@@ -201,7 +171,7 @@ int tedge_c8y_host_set(const char *host)
 		return -EINVAL;
 	}
 	strcpy(c8y_host, host);
-	return settings_save_one(TEDGE_KEY_C8Y_URL, c8y_host, strlen(c8y_host));
+	return tedge_port_kv_set(TEDGE_KEY_C8Y_URL, c8y_host, strlen(c8y_host));
 }
 
 int tedge_set_c8y_url(const char *host)
@@ -212,40 +182,13 @@ int tedge_set_c8y_url(const char *host)
 	return tedge_c8y_host_set(host);
 }
 
-static int settings_set_cb(const char *key, size_t len, settings_read_cb read_cb,
-			   void *cb_arg)
+static void load_c8y_host(void)
 {
-	if (settings_name_steq(key, "c8y/url", NULL) && len < sizeof(c8y_host)) {
-		ssize_t n = read_cb(cb_arg, c8y_host, sizeof(c8y_host) - 1);
+	int n = tedge_port_kv_get(TEDGE_KEY_C8Y_URL, c8y_host,
+				  sizeof(c8y_host) - 1);
 
-		if (n > 0) {
-			c8y_host[n] = '\0';
-		}
-		return 0;
-	}
-	return 0; /* other keys belong to the transport and onboarding */
+	c8y_host[(n > 0) ? n : 0] = '\0';
 }
-
-SETTINGS_STATIC_HANDLER_DEFINE(tedge_core, TEDGE_SETTINGS_ROOT, NULL,
-			       settings_set_cb, NULL, NULL);
-
-/* ------------------------------------------------------------------------ */
-/* The "tedge" shell root                                                    */
-/*                                                                           */
-/* One root command for the whole client, defined here because this file is  */
-/* always compiled when the module is. Everything else — the module's own    */
-/* features and the application's test aids alike — hangs subcommands off it */
-/* with SHELL_SUBCMD_ADD((tedge), ...), so a device ends up with one command */
-/* tree instead of two roots of the same name, only one of which the shell   */
-/* would ever reach.                                                         */
-/* ------------------------------------------------------------------------ */
-
-#if defined(CONFIG_SHELL)
-#include <zephyr/shell/shell.h>
-
-SHELL_SUBCMD_SET_CREATE(tedge_shell_cmds, (tedge));
-SHELL_CMD_REGISTER(tedge, &tedge_shell_cmds, "thin-edge.io client", NULL);
-#endif /* CONFIG_SHELL */
 
 /* ------------------------------------------------------------------------ */
 /* Twin fragments                                                            */
@@ -259,7 +202,7 @@ int tedge_publish_twin(const char *fragment, const char *json)
 	    strlen(fragment) >= sizeof(twin[0].fragment)) {
 		return -EINVAL;
 	}
-	k_mutex_lock(&twin_lock, K_FOREVER);
+	tedge_port_mutex_lock(&twin_lock);
 	for (int i = 0; i < TWIN_SLOTS; i++) {
 		bool match = strcmp(twin[i].fragment, fragment) == 0;
 
@@ -288,9 +231,9 @@ int tedge_publish_twin(const char *fragment, const char *json)
 		rc = 0;
 		break;
 	}
-	k_mutex_unlock(&twin_lock);
+	tedge_port_mutex_unlock(&twin_lock);
 	if (rc == 0) {
-		k_event_post(&events, EV_WAKE);
+		tedge_port_event_post(&events, EV_WAKE);
 	} else if (rc == -ENOMEM) {
 		LOG_ERR("no free twin slot for \"%s\" (%d)", fragment, TWIN_SLOTS);
 	}
@@ -299,26 +242,26 @@ int tedge_publish_twin(const char *fragment, const char *json)
 
 void tedge_telemetry_wake(void)
 {
-	k_event_post(&events, EV_WAKE);
+	tedge_port_event_post(&events, EV_WAKE);
 }
 
 void tedge_request_reconnect(void)
 {
-	k_event_post(&events, EV_RECONNECT | EV_WAKE);
+	tedge_port_event_post(&events, EV_RECONNECT | EV_WAKE);
 }
 
 void tedge_twin_republish(void)
 {
 	const struct tedge_transport *t = tedge_transport_get();
 
-	k_mutex_lock(&twin_lock, K_FOREVER);
+	tedge_port_mutex_lock(&twin_lock);
 	for (int i = 0; i < TWIN_SLOTS; i++) {
 		if (twin[i].fragment[0] != '\0' && twin[i].json != NULL) {
 			(void)t->publish_twin(twin[i].fragment, twin[i].json);
 		}
 	}
 	twin_dirty = false;
-	k_mutex_unlock(&twin_lock);
+	tedge_port_mutex_unlock(&twin_lock);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -333,12 +276,12 @@ static void l4_handler(struct net_mgmt_event_callback *cb, uint64_t event,
 
 	if (event == NET_EVENT_L4_CONNECTED ||
 	    event == NET_EVENT_IPV4_ADDR_ADD) { /* whichever the app provides */
-		k_event_clear(&events, EV_NET_DOWN);
-		k_event_post(&events, EV_NET_UP | EV_WAKE);
+		tedge_port_event_clear(&events, EV_NET_DOWN);
+		tedge_port_event_post(&events, EV_NET_UP | EV_WAKE);
 	} else if (event == NET_EVENT_L4_DISCONNECTED ||
 		   event == NET_EVENT_IPV4_ADDR_DEL) {
-		k_event_clear(&events, EV_NET_UP);
-		k_event_post(&events, EV_NET_DOWN | EV_WAKE);
+		tedge_port_event_clear(&events, EV_NET_UP);
+		tedge_port_event_post(&events, EV_NET_DOWN | EV_WAKE);
 	}
 }
 
@@ -349,7 +292,7 @@ static bool network_up(void)
 	if (iface != NULL && net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED)) {
 		return true;
 	}
-	return k_event_test(&events, EV_NET_UP) != 0;
+	return tedge_port_event_test(&events, EV_NET_UP) != 0;
 }
 
 /* Wait for connectivity. Returns false when the client is stopping. */
@@ -360,8 +303,8 @@ static bool wait_for_network(void)
 	}
 	tedge_set_state(TEDGE_STATE_WAITING_NETWORK);
 	while (!network_up()) {
-		uint32_t got = k_event_wait(&events, EV_NET_UP | EV_STOP, false,
-					    K_SECONDS(5));
+		uint32_t got = tedge_port_event_wait(&events,
+						     EV_NET_UP | EV_STOP, 5000);
 
 		if (got & EV_STOP) {
 			return false;
@@ -375,16 +318,14 @@ static bool wait_for_network(void)
 /* Client thread                                                             */
 /* ------------------------------------------------------------------------ */
 
-static void client_thread(void *a, void *b, void *c)
+static void client_thread(void *arg)
 {
 	const struct tedge_transport *transport = tedge_transport_get();
 	uint32_t backoff = 0;
 
-	ARG_UNUSED(a);
-	ARG_UNUSED(b);
-	ARG_UNUSED(c);
+	TEDGE_UNUSED(arg);
 
-	while (!(k_event_test(&events, EV_STOP))) {
+	while (!(tedge_port_event_test(&events, EV_STOP))) {
 		int64_t connected_at;
 		int rc;
 
@@ -394,7 +335,7 @@ static void client_thread(void *a, void *b, void *c)
 		if (!tedge_port_time_is_valid()) {
 			tedge_set_state(TEDGE_STATE_WAITING_TIME);
 			if (tedge_port_time_sync() != 0) {
-				k_sleep(K_SECONDS(5));
+				tedge_port_sleep_ms(5000);
 				continue;
 			}
 		}
@@ -406,8 +347,8 @@ static void client_thread(void *a, void *b, void *c)
 						     CONFIG_TEDGE_RECONNECT_BACKOFF_MAX_S);
 			LOG_WRN("connect failed (%d); retrying in %u s", rc,
 				backoff);
-			uint32_t got = k_event_wait(&events, EV_STOP | EV_NET_DOWN,
-						    false, K_SECONDS(backoff));
+			uint32_t got = tedge_port_event_wait(
+				&events, EV_STOP | EV_NET_DOWN, backoff * 1000);
 
 			if (got & EV_STOP) {
 				break;
@@ -415,21 +356,21 @@ static void client_thread(void *a, void *b, void *c)
 			continue;
 		}
 
-		connected_at = k_uptime_get();
+		connected_at = tedge_port_uptime_ms();
 		tedge_set_state(TEDGE_STATE_CONNECTED);
 		tedge_twin_republish();
 
 		/* Service the session until it ends. */
-		k_event_clear(&events, EV_RECONNECT);
-		while (!(k_event_test(&events, EV_STOP))) {
-			if (k_event_test(&events, EV_NET_DOWN)) {
+		tedge_port_event_clear(&events, EV_RECONNECT);
+		while (!(tedge_port_event_test(&events, EV_STOP))) {
+			if (tedge_port_event_test(&events, EV_NET_DOWN)) {
 				rc = -ENETDOWN;
 				break;
 			}
-			if (k_event_test(&events, EV_RECONNECT)) {
+			if (tedge_port_event_test(&events, EV_RECONNECT)) {
 				/* Something replaced a credential; the new one
 				 * only takes effect on a new TLS session. */
-				k_event_clear(&events, EV_RECONNECT);
+				tedge_port_event_clear(&events, EV_RECONNECT);
 				LOG_INF("reconnecting to pick up a new "
 					"credential");
 				rc = 0;
@@ -451,23 +392,23 @@ static void client_thread(void *a, void *b, void *c)
 #endif
 		}
 		transport->disconnect();
-		if (k_uptime_get() - connected_at > STABLE_S * 1000) {
+		if (tedge_port_uptime_ms() - connected_at > STABLE_S * 1000) {
 			backoff = 0; /* the session was healthy */
 		}
-		if (k_event_test(&events, EV_STOP)) {
+		if (tedge_port_event_test(&events, EV_STOP)) {
 			break;
 		}
 		LOG_WRN("session ended (%d)", rc);
 		backoff = tedge_backoff_next(backoff,
 						     CONFIG_TEDGE_RECONNECT_BACKOFF_MAX_S);
 		LOG_INF("reconnecting in %u s", backoff);
-		(void)k_event_wait(&events, EV_STOP, false, K_SECONDS(backoff));
+		(void)tedge_port_event_wait(&events, EV_STOP, backoff * 1000);
 	}
 	tedge_set_state(TEDGE_STATE_STOPPED);
 }
 
-static K_THREAD_STACK_DEFINE(client_stack, CONFIG_TEDGE_THREAD_STACK_SIZE);
-static struct k_thread client_tid;
+TEDGE_PORT_STACK_DEFINE(client_stack, TEDGE_THREAD_STACK_SIZE);
+static tedge_port_thread_t client_tid;
 static bool running;
 
 /* ------------------------------------------------------------------------ */
@@ -489,10 +430,10 @@ int tedge_init(const struct tedge_identity *id, const struct tedge_hooks *h)
 	}
 	hooks = h;
 
-	(void)settings_subsys_init();
-	(void)settings_load_subtree(TEDGE_SETTINGS_ROOT);
+	(void)tedge_port_kv_init();
+	load_c8y_host();
 
-	if (tedge_platform_default_id(mac_id, sizeof(mac_id)) != 0) {
+	if (tedge_default_device_id(mac_id, sizeof(mac_id)) != 0) {
 		snprintf(mac_id, sizeof(mac_id), "%s-unknown",
 			 CONFIG_TEDGE_DEVICE_ID_PREFIX);
 	}
@@ -550,7 +491,7 @@ int tedge_start(void)
 	if (running) {
 		return -EALREADY;
 	}
-	k_event_clear(&events, EV_STOP);
+	tedge_port_event_clear(&events, EV_STOP);
 #if defined(CONFIG_TEDGE_LOG_UPLOAD)
 	tedge_log_upload_init();
 #endif
@@ -564,11 +505,9 @@ int tedge_start(void)
 	tedge_params_on_start();
 #endif
 	running = true;
-	k_thread_create(&client_tid, client_stack,
-			K_THREAD_STACK_SIZEOF(client_stack), client_thread, NULL,
-			NULL, NULL, K_PRIO_PREEMPT(CONFIG_TEDGE_THREAD_PRIORITY),
-			0, K_NO_WAIT);
-	k_thread_name_set(&client_tid, "tedge");
+	(void)tedge_port_thread_start(&client_tid, client_stack,
+				      TEDGE_PORT_STACK_SIZEOF(client_stack),
+				      client_thread, NULL, "tedge");
 	return 0;
 }
 
@@ -577,8 +516,8 @@ int tedge_stop(void)
 	if (!running) {
 		return -EALREADY;
 	}
-	k_event_post(&events, EV_STOP | EV_WAKE);
-	(void)k_thread_join(&client_tid, K_SECONDS(10));
+	tedge_port_event_post(&events, EV_STOP | EV_WAKE);
+	(void)tedge_port_thread_join(&client_tid, 10000);
 	running = false;
 	return 0;
 }

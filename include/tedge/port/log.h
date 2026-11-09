@@ -44,4 +44,8 @@ enum tedge_log_level {
  */
 int tedge_port_log_set_level(enum tedge_log_level level);
 
+/** Write out every log line still queued (deferred logging), before a
+ *  reset would lose it. */
+void tedge_port_log_flush(void);
+
 #endif /* TEDGE_PORT_LOG_H_ */

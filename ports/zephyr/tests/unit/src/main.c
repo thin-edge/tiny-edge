@@ -1290,7 +1290,7 @@ ZTEST_SUITE(tedge_json_value, NULL, NULL, NULL, NULL, NULL);
 /* agree — the values, the settings keys and the twin — actually do.         */
 /* ------------------------------------------------------------------------ */
 
-#include <zephyr/settings/settings.h>
+#include <tedge/port/kv.h>
 #include <zephyr/types.h>
 #include <stdlib.h>
 
@@ -1318,8 +1318,9 @@ int tedge_publish_twin(const char *fragment, const char *json)
 	return 0;
 }
 
-/* Settings, stubbed: a flat key/value store, so a test can see exactly
- * which keys were written and prove that an unchanged value wrote none. */
+/* The port's key-value store, faked: a flat table, so a test can see
+ * exactly which keys were written and prove that an unchanged value wrote
+ * none. */
 #define STORE_SLOTS 16
 static struct {
 	char key[64];
@@ -1335,7 +1336,7 @@ static void store_clear(void)
 	store_writes = 0;
 }
 
-int settings_save_one(const char *name, const void *value, size_t val_len)
+int tedge_port_kv_set(const char *name, const void *value, size_t val_len)
 {
 	int free_slot = -1;
 
@@ -1363,7 +1364,7 @@ int settings_save_one(const char *name, const void *value, size_t val_len)
 	return 0;
 }
 
-int settings_delete(const char *name)
+int tedge_port_kv_delete(const char *name)
 {
 	for (int i = 0; i < STORE_SLOTS; i++) {
 		if (store_slot[i].used && strcmp(store_slot[i].key, name) == 0) {
@@ -1374,37 +1375,34 @@ int settings_delete(const char *name)
 	return 0;
 }
 
-static ssize_t store_read(void *cb_arg, void *data, size_t len)
+int tedge_port_kv_get(const char *key, void *buf, size_t cap)
 {
-	size_t i = (size_t)(uintptr_t)cb_arg;
-	size_t n = MIN(len, store_slot[i].len);
-
-	memcpy(data, store_slot[i].value, n);
-	return (ssize_t)n;
+	for (size_t i = 0; i < STORE_SLOTS; i++) {
+		if (!store_slot[i].used || strcmp(store_slot[i].key, key) != 0) {
+			continue;
+		}
+		if (store_slot[i].len > cap) {
+			return -ENOSPC;
+		}
+		memcpy(buf, store_slot[i].value, store_slot[i].len);
+		return (int)store_slot[i].len;
+	}
+	return -ENOENT;
 }
 
-int settings_load_subtree_direct(const char *subtree,
-				 settings_load_direct_cb cb, void *param)
+int tedge_port_kv_foreach(const char *prefix,
+			  void (*cb)(const char *subkey, void *ctx), void *ctx)
 {
-	size_t prefix = strlen(subtree);
+	size_t len = strlen(prefix);
 
 	for (size_t i = 0; i < STORE_SLOTS; i++) {
 		const char *key = store_slot[i].key;
-		const char *relative;
 
-		if (!store_slot[i].used ||
-		    strncmp(key, subtree, prefix) != 0) {
-			continue;
+		/* "tedge/paramX" is not under "tedge/param". */
+		if (store_slot[i].used && strncmp(key, prefix, len) == 0 &&
+		    key[len] == '/') {
+			cb(key + len + 1, ctx);
 		}
-		if (key[prefix] == '\0') {
-			relative = ""; /* the subtree is the value itself */
-		} else if (key[prefix] == '/') {
-			relative = key + prefix + 1;
-		} else {
-			continue; /* "tedge/paramX" is not under "tedge/param" */
-		}
-		(void)cb(relative, store_slot[i].len, store_read,
-			 (void *)(uintptr_t)i, param);
 	}
 	return 0;
 }

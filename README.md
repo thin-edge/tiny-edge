@@ -73,11 +73,12 @@ Functions a port implements are prefixed `tedge_port_`.
 |---|---|
 | `config.h` | `<tedge_config.h>`: the build configuration as `TEDGE_*` macros. Zephyr generates it from Kconfig. |
 | `log.h` | `<tedge_port/log.h>`: the `TEDGE_LOG_*` macros on the RTOS's logging, and the run-time log level |
-| `os.h` | `<tedge_port/os.h>`: the mutex type; lock, uptime, and random numbers |
+| `os.h` | `<tedge_port/os.h>`: the kernel object types. Mutexes, spinlocks, threads on static stacks, message queues, event flags, semaphores, delayed work, atomics, uptime, random numbers, and the client's own heap |
 | `time.h` | The wall clock: whether it is set, setting it from the network, reading it |
-| `device.h` | The reset cause |
+| `device.h` | The MAC address, the reset and its cause, and crash dumps |
+| `kv.h` | Persistent key-value storage: the tenant, credentials, parameter values, the state of an update |
 
-Network, TLS, settings, crypto, and firmware slots are added the same way
+Network, TLS, crypto, and firmware slots are added the same way
 as the core files that use them move behind the interface.
 
 The boundary is checked in CI. `scripts/check-portability.py` fails when

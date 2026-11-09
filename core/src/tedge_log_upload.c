@@ -17,10 +17,12 @@
  */
 
 #include "tedge_internal.h"
+#include "tedge_util.h"
 
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/sys/clock.h>
+#include <tedge/port/device.h>
+#include <tedge/port/log.h>
+#include <tedge/port/os.h>
+#include <tedge/port/time.h>
 
 #include <errno.h>
 #include <stdio.h>
@@ -28,12 +30,12 @@
 #include <string.h>
 #include <time.h>
 
-LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_DECLARE();
 
-#define TYPE_SLOTS  CONFIG_TEDGE_LOG_TYPE_SLOTS
-#define MAX_BYTES   CONFIG_TEDGE_LOG_UPLOAD_MAX_BYTES
+#define TYPE_SLOTS  TEDGE_LOG_TYPE_SLOTS
+#define MAX_BYTES   TEDGE_LOG_UPLOAD_MAX_BYTES
 #define TRUNC_NOTE  "\n--- truncated: this device sends at most " \
-		    STRINGIFY(CONFIG_TEDGE_LOG_UPLOAD_MAX_BYTES) " bytes ---\n"
+		    TEDGE_STRINGIFY(TEDGE_LOG_UPLOAD_MAX_BYTES) " bytes ---\n"
 
 static struct {
 	const char *type;
@@ -41,8 +43,8 @@ static struct {
 	void *user_data;
 } types[TYPE_SLOTS];
 
-static K_THREAD_STACK_DEFINE(up_stack, CONFIG_TEDGE_LOG_UPLOAD_STACK_SIZE);
-static struct k_thread up_thread;
+TEDGE_PORT_STACK_DEFINE(up_stack, TEDGE_LOG_UPLOAD_STACK_SIZE);
+static tedge_port_thread_t up_thread;
 static bool job_running;
 
 static struct {
@@ -53,11 +55,11 @@ static struct {
 	bool truncated;  /* set by the measuring pass, kept for the sending one */
 } job;
 
-K_MSGQ_DEFINE(log_events, sizeof(struct tedge_log_event), 2, 4);
+TEDGE_PORT_MSGQ_DEFINE(log_events, sizeof(struct tedge_log_event), 2);
 
 int tedge_log_poll_event(struct tedge_log_event *ev)
 {
-	return k_msgq_get(&log_events, ev, K_NO_WAIT);
+	return tedge_port_msgq_get(&log_events, ev);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -79,8 +81,8 @@ int tedge_register_log_type(const char *type, tedge_log_reader_t reader,
 			return 0;
 		}
 	}
-	LOG_WRN("log: no free slot for the type \"%s\" "
-		"(CONFIG_TEDGE_LOG_TYPE_SLOTS)", type);
+	TEDGE_LOG_WRN("log: no free slot for the type \"%s\" "
+		"(" TEDGE_CONFIG_NAME(TEDGE_LOG_TYPE_SLOTS) ")", type);
 	return -ENOSPC;
 }
 
@@ -111,7 +113,7 @@ static int count_sink(const void *data, size_t len, void *ctx)
 {
 	struct counter *c = ctx;
 
-	ARG_UNUSED(data);
+	TEDGE_UNUSED(data);
 	if (c->n + len > c->cap) {
 		c->hit_cap = true;
 		return -ENOSPC; /* the reader passes this back and stops */
@@ -160,7 +162,7 @@ static int produce(tedge_sink_fn sink, void *ctx, void *user_data)
 	tedge_log_reader_t reader;
 	void *reader_data = NULL;
 
-	ARG_UNUSED(user_data);
+	TEDGE_UNUSED(user_data);
 	reader = reader_for(job.type, &reader_data);
 	if (reader == NULL) {
 		return -ENOENT;
@@ -203,7 +205,7 @@ struct grab {
 static int grab_sink(const void *data, size_t len, void *ctx)
 {
 	struct grab *g = ctx;
-	size_t n = MIN(len, g->len - 1 - g->used);
+	size_t n = TEDGE_MIN(len, g->len - 1 - g->used);
 
 	memcpy(g->buf + g->used, data, n);
 	g->used += n;
@@ -237,7 +239,7 @@ static int resolve_mo_id(void)
 	 * The first "id": in that answer is the managed object's; "externalId"
 	 * does not match the pattern, which looks for the quote before it. */
 	if (tedge_json_field(body, "id", mo_id, sizeof(mo_id)) <= 0) {
-		LOG_ERR("log: no device id in the identity answer");
+		TEDGE_LOG_ERR("log: no device id in the identity answer");
 		return -ENOENT;
 	}
 	return 0;
@@ -245,11 +247,12 @@ static int resolve_mo_id(void)
 
 static void iso_now(char *out, size_t len)
 {
-	struct timespec now;
+	time_t now = 0;
 	struct tm tm;
 
-	(void)sys_clock_gettime(SYS_CLOCK_REALTIME, &now);
-	gmtime_r(&now.tv_sec, &tm);
+	/* The client only uploads once connected, which needs a valid clock. */
+	(void)tedge_port_time_now(&now);
+	gmtime_r(&now, &tm);
 	strftime(out, len, "%Y-%m-%dT%H:%M:%SZ", &tm);
 }
 
@@ -288,10 +291,10 @@ static void post(int rc, const char *url, const char *reason)
 	if (reason != NULL) {
 		snprintf(ev.reason, sizeof(ev.reason), "%s", reason);
 	}
-	(void)k_msgq_put(&log_events, &ev, K_NO_WAIT);
+	(void)tedge_port_msgq_put(&log_events, &ev);
 }
 
-static void upload_thread(void *a, void *b, void *c)
+static void upload_thread(void *arg)
 {
 	char event_url[192];
 	char binaries[224];
@@ -299,9 +302,7 @@ static void upload_thread(void *a, void *b, void *c)
 	size_t length;
 	int ret;
 
-	ARG_UNUSED(a);
-	ARG_UNUSED(b);
-	ARG_UNUSED(c);
+	TEDGE_UNUSED(arg);
 
 	ret = resolve_mo_id();
 	if (ret != 0) {
@@ -337,10 +338,10 @@ static void upload_thread(void *a, void *b, void *c)
 		post(ret, NULL, "the log could not be uploaded");
 		goto done;
 	}
-	LOG_INF("log: sent %s (%zu B)", job.type, length);
-#if defined(CONFIG_TEDGE_COREDUMP)
+	TEDGE_LOG_INF("log: sent %s (%zu B)", job.type, length);
+#if defined(TEDGE_COREDUMP)
 	if (strcmp(job.type, "coredump") == 0) {
-		tedge_coredump_taken();
+		tedge_port_coredump_taken();
 	}
 #endif
 	post(0, binaries, NULL);
@@ -386,11 +387,9 @@ int tedge_log_request(const char *line, char *reason, size_t rlen)
 	job.limit = MAX_BYTES - strlen(TRUNC_NOTE);
 
 	job_running = true;
-	k_thread_create(&up_thread, up_stack, K_THREAD_STACK_SIZEOF(up_stack),
-			upload_thread, NULL, NULL, NULL,
-			K_PRIO_PREEMPT(CONFIG_TEDGE_THREAD_PRIORITY), 0,
-			K_NO_WAIT);
-	k_thread_name_set(&up_thread, "tedge_log");
+	(void)tedge_port_thread_start(&up_thread, up_stack,
+				      TEDGE_PORT_STACK_SIZEOF(up_stack),
+				      upload_thread, NULL, "tedge_log");
 	return 0;
 }
 
@@ -409,7 +408,7 @@ static int ring_reader(const struct tedge_log_request *req,
 	size_t total = tedge_log_ring_size();
 	uint32_t sent = 0;
 
-	ARG_UNUSED(user_data);
+	TEDGE_UNUSED(user_data);
 	while (offset < total) {
 		size_t n = tedge_log_ring_read(offset, (uint8_t *)line,
 					       sizeof(line) - 1);
@@ -449,7 +448,7 @@ static int ring_reader(const struct tedge_log_request *req,
 void tedge_log_upload_init(void)
 {
 	(void)tedge_register_log_type("tedge-log", ring_reader, NULL);
-#if defined(CONFIG_TEDGE_COREDUMP)
-	tedge_coredump_init();
+#if defined(TEDGE_COREDUMP)
+	tedge_port_coredump_init();
 #endif
 }

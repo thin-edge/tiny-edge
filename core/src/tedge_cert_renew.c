@@ -7,7 +7,7 @@
  * remote access, no firmware update. So the client watches its own expiry
  * and renews well before it matters:
  *
- *   remaining lifetime < CONFIG_TEDGE_CERT_RENEW_BEFORE_DAYS
+ *   remaining lifetime < TEDGE_CERT_RENEW_BEFORE_DAYS
  *     -> CSR for the same key, signed inside PSA
  *     -> POST /.well-known/est/simplereenroll with the Bearer token
  *        (the endpoint refuses a client certificate alone)
@@ -21,12 +21,12 @@
  */
 
 #include "tedge_internal.h"
+#include "tedge_util.h"
 
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/random/random.h>
-#include <zephyr/settings/settings.h>
-#include <zephyr/sys/clock.h>
+#include <tedge/port/log.h>
+#include <tedge/port/os.h>
+#include <tedge/port/time.h>
+
 #include <zephyr/sys/timeutil.h>
 
 #include <mbedtls/x509_crt.h>
@@ -36,7 +36,7 @@
 #include <string.h>
 #include <time.h>
 
-LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_DECLARE();
 
 #define EST_REENROLL_PATH "/.well-known/est/simplereenroll"
 #define SECONDS_PER_DAY   86400
@@ -84,7 +84,7 @@ static int read_expiry(time_t *expires)
 	if (ret == 0) {
 		*expires = to_epoch(&crt.valid_to);
 	} else {
-		LOG_WRN("certificate: cannot read the expiry (-0x%04x)", -ret);
+		TEDGE_LOG_WRN("certificate: cannot read the expiry (-0x%04x)", -ret);
 		ret = -EBADMSG;
 	}
 	mbedtls_x509_crt_free(&crt);
@@ -93,13 +93,12 @@ static int read_expiry(time_t *expires)
 
 static int days_remaining(void)
 {
-	struct timespec now;
+	time_t now;
 
-	if (cert_expires == 0 || !tedge_port_time_is_valid()) {
+	if (cert_expires == 0 || tedge_port_time_now(&now) != 0) {
 		return -1;
 	}
-	(void)sys_clock_gettime(SYS_CLOCK_REALTIME, &now);
-	return (int)((cert_expires - now.tv_sec) / SECONDS_PER_DAY);
+	return (int)((cert_expires - now) / SECONDS_PER_DAY);
 }
 
 int tedge_cert_twin(char *buf, size_t len)
@@ -131,7 +130,7 @@ static void raise_alarm(int days)
 	struct tm tm;
 	char iso[24];
 	char text[110];
-#if !defined(CONFIG_TEDGE_TELEMETRY)
+#if !defined(TEDGE_TELEMETRY)
 	char line[160];
 	char quoted[128];
 #endif
@@ -144,7 +143,7 @@ static void raise_alarm(int days)
 	snprintf(text, sizeof(text),
 		 "the device certificate expires on %s (%d days) and could not "
 		 "be renewed", iso, days);
-#if defined(CONFIG_TEDGE_TELEMETRY)
+#if defined(TEDGE_TELEMETRY)
 	if (tedge_raise_alarm("c8y_CertificateExpiring", TEDGE_ALARM_CRITICAL,
 			      text) == 0) {
 #else
@@ -155,7 +154,7 @@ static void raise_alarm(int days)
 	if (tedge_c8y_publish_sr(line) == 0) {
 #endif
 		alarm_raised = true;
-		LOG_ERR("certificate: %s", text);
+		TEDGE_LOG_ERR("certificate: %s", text);
 	}
 }
 
@@ -164,7 +163,7 @@ static void clear_alarm(void)
 	if (!alarm_raised) {
 		return;
 	}
-#if defined(CONFIG_TEDGE_TELEMETRY)
+#if defined(TEDGE_TELEMETRY)
 	if (tedge_clear_alarm("c8y_CertificateExpiring") == 0) {
 #else
 	if (tedge_c8y_publish_sr("306,c8y_CertificateExpiring") == 0) {
@@ -183,7 +182,7 @@ static int renew(void)
 	size_t new_len = 0;
 	char auth[1100];
 	const char *token = tedge_c8y_jwt();
-	int64_t t0 = k_uptime_get();
+	int64_t t0 = tedge_port_uptime_ms();
 	int ret;
 
 	if (token == NULL || token[0] == '\0') {
@@ -192,7 +191,7 @@ static int renew(void)
 
 	ret = tedge_est_make_csr(NULL, 0);
 	if (ret != 0) {
-		LOG_ERR("certificate: could not build the renewal request (%d)",
+		TEDGE_LOG_ERR("certificate: could not build the renewal request (%d)",
 			ret);
 		tedge_est_release();
 		return ret;
@@ -203,22 +202,22 @@ static int renew(void)
 	memset(auth, 0, sizeof(auth));
 	tedge_est_release();
 	if (ret != 0) {
-		LOG_WRN("certificate: renewal failed (%d); keeping the current "
+		TEDGE_LOG_WRN("certificate: renewal failed (%d); keeping the current "
 			"certificate", ret);
 		return ret;
 	}
 
 	ret = tedge_credentials_replace(new_cert, new_len);
 	if (ret != 0) {
-		LOG_ERR("certificate: the new certificate could not be stored "
+		TEDGE_LOG_ERR("certificate: the new certificate could not be stored "
 			"(%d); keeping the current one", ret);
 		return ret;
 	}
 	cert_expires = 0;
 	(void)read_expiry(&cert_expires);
 	renewals++;
-	LOG_INF("certificate: renewed in %lld ms (%zu B), now valid for %d days",
-		k_uptime_get() - t0, new_len, days_remaining());
+	TEDGE_LOG_INF("certificate: renewed in %lld ms (%zu B), now valid for %d days",
+		tedge_port_uptime_ms() - t0, new_len, days_remaining());
 	clear_alarm();
 	return 0;
 }
@@ -234,44 +233,44 @@ void tedge_cert_renew_tick(void)
 	if (!tedge_port_time_is_valid()) {
 		return; /* the expiry means nothing without a clock */
 	}
-	if (next_check_at != 0 && k_uptime_get() < next_check_at) {
+	if (next_check_at != 0 && tedge_port_uptime_ms() < next_check_at) {
 		return;
 	}
 	if (cert_expires == 0 && read_expiry(&cert_expires) != 0) {
-		next_check_at = k_uptime_get() +
-				CONFIG_TEDGE_CERT_RENEW_CHECK_HOURS * 3600000LL;
+		next_check_at = tedge_port_uptime_ms() +
+				TEDGE_CERT_RENEW_CHECK_HOURS * 3600000LL;
 		return;
 	}
 
 	days = days_remaining();
-	if (tedge_cert_action(days, CONFIG_TEDGE_CERT_RENEW_BEFORE_DAYS,
-			      CONFIG_TEDGE_CERT_RENEW_ALARM_DAYS,
+	if (tedge_cert_action(days, TEDGE_CERT_RENEW_BEFORE_DAYS,
+			      TEDGE_CERT_RENEW_ALARM_DAYS,
 			      false) == TEDGE_CERT_WAIT) {
 		/* Spread the next check within the interval, so a fleet
 		 * enrolled together does not renew together. */
 		int64_t interval =
-			CONFIG_TEDGE_CERT_RENEW_CHECK_HOURS * 3600000LL;
+			TEDGE_CERT_RENEW_CHECK_HOURS * 3600000LL;
 
-		next_check_at = k_uptime_get() + interval / 2 +
-				(sys_rand32_get() % (uint32_t)interval);
-		LOG_DBG("certificate: %d days left; next check in %lld min", days,
-			(next_check_at - k_uptime_get()) / 60000);
+		next_check_at = tedge_port_uptime_ms() + interval / 2 +
+				(tedge_port_random32() % (uint32_t)interval);
+		TEDGE_LOG_DBG("certificate: %d days left; next check in %lld min", days,
+			(next_check_at - tedge_port_uptime_ms()) / 60000);
 		return;
 	}
 
-	LOG_INF("certificate: %d days left; renewing", days);
+	TEDGE_LOG_INF("certificate: %d days left; renewing", days);
 	if (renew() == 0) {
-		next_check_at = k_uptime_get() +
-				CONFIG_TEDGE_CERT_RENEW_CHECK_HOURS * 3600000LL;
+		next_check_at = tedge_port_uptime_ms() +
+				TEDGE_CERT_RENEW_CHECK_HOURS * 3600000LL;
 		/* The session still uses the old certificate: a reconnect
 		 * picks up the new one while the old one is still valid. */
 		tedge_request_reconnect();
 		return;
 	}
 
-	next_check_at = k_uptime_get() + RETRY_INSIDE_MARGIN_MS;
-	if (tedge_cert_action(days, CONFIG_TEDGE_CERT_RENEW_BEFORE_DAYS,
-			      CONFIG_TEDGE_CERT_RENEW_ALARM_DAYS,
+	next_check_at = tedge_port_uptime_ms() + RETRY_INSIDE_MARGIN_MS;
+	if (tedge_cert_action(days, TEDGE_CERT_RENEW_BEFORE_DAYS,
+			      TEDGE_CERT_RENEW_ALARM_DAYS,
 			      true) == TEDGE_CERT_ALARM) {
 		raise_alarm(days);
 	}

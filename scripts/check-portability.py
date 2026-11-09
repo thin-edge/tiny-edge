@@ -42,8 +42,6 @@ KNOWN_RTOS_BOUND = {
     "core/src/tedge_http_download.c",
     "core/src/tedge_http_upload.c",
     "core/src/tedge_internal.h",
-    "core/src/tedge_log_upload.c",
-    "core/src/tedge_parameters.c",
     "core/src/tedge_ra_target.c",
     "core/src/tedge_remote_access.c",
     "include/tedge/tedge.h",

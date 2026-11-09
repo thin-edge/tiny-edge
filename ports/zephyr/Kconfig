@@ -21,7 +21,7 @@ config TEDGE_KERNEL_SELECTS
 	bool
 	default y
 	select EVENTS
-	# tedge_platform_reset() falls back to sys_reboot().
+	# tedge_port_reset() falls back to sys_reboot().
 	select REBOOT
 
 config TEDGE_EXPERIMENTAL_FEATURES

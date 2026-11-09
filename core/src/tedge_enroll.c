@@ -16,12 +16,13 @@
 
 #include "tedge_internal.h"
 
+#include <tedge/port/kv.h>
+
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/http/client.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
-#include <zephyr/settings/settings.h>
 
 #include <psa/crypto.h>
 #include <mbedtls/asn1.h>
@@ -72,30 +73,12 @@ static uint16_t resp_status;
 /* Settings                                                                  */
 /* ------------------------------------------------------------------------ */
 
-struct blob {
-	void *buf;
-	size_t cap;
-	size_t len;
-};
-
-static int load_cb(const char *key, size_t len, settings_read_cb read_cb,
-		   void *cb_arg, void *param)
+/* The length of the value stored under @p key, 0 when there is none. */
+static size_t stored(const char *key, void *buf, size_t cap)
 {
-	struct blob *b = param;
+	int n = tedge_port_kv_get(key, buf, cap);
 
-	ARG_UNUSED(key);
-	if (len <= b->cap) {
-		b->len = read_cb(cb_arg, b->buf, len);
-	}
-	return 0;
-}
-
-static size_t settings_get(const char *key, void *buf, size_t cap)
-{
-	struct blob b = { .buf = buf, .cap = cap };
-
-	(void)settings_load_subtree_direct(key, load_cb, &b);
-	return b.len;
+	return (n > 0) ? (size_t)n : 0;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -144,7 +127,7 @@ static void ensure_otp(void)
 	}
 	/* A stored password wins, whatever its length: it may have been
 	 * issued outside the device and already registered in Cumulocity. */
-	size_t n = settings_get(TEDGE_KEY_ENROLL_OTP, otp, OTP_MAX);
+	size_t n = stored(TEDGE_KEY_ENROLL_OTP, otp, OTP_MAX);
 
 	if (n > 0 && n <= OTP_MAX) {
 		otp[n] = '\0';
@@ -155,7 +138,7 @@ static void ensure_otp(void)
 		otp[i] = alphabet[rnd[i] % (sizeof(alphabet) - 1)];
 	}
 	otp[OTP_LEN] = '\0';
-	(void)settings_save_one(TEDGE_KEY_ENROLL_OTP, otp, OTP_LEN);
+	(void)tedge_port_kv_set(TEDGE_KEY_ENROLL_OTP, otp, OTP_LEN);
 }
 
 int tedge_set_enroll_otp(const char *password)
@@ -177,12 +160,12 @@ int tedge_set_enroll_otp(const char *password)
 	if (cert_der_len > 0 || credentials_ready) {
 		LOG_WRN("discarding the certificate of the previous enrollment");
 	}
-	(void)settings_delete(TEDGE_KEY_ENROLL_CERT);
+	(void)tedge_port_kv_delete(TEDGE_KEY_ENROLL_CERT);
 	cert_der_len = 0;
 	credentials_ready = false;
 
-	(void)settings_save_one(TEDGE_KEY_ENROLL_OTP_EXT, "1", 1);
-	return settings_save_one(TEDGE_KEY_ENROLL_OTP, otp, n);
+	(void)tedge_port_kv_set(TEDGE_KEY_ENROLL_OTP_EXT, "1", 1);
+	return tedge_port_kv_set(TEDGE_KEY_ENROLL_OTP, otp, n);
 }
 
 /* Whether the stored password was supplied from outside. Persisted, so a
@@ -191,7 +174,7 @@ static bool otp_supplied(void)
 {
 	char flag;
 
-	return settings_get(TEDGE_KEY_ENROLL_OTP_EXT, &flag, sizeof(flag)) > 0;
+	return stored(TEDGE_KEY_ENROLL_OTP_EXT, &flag, sizeof(flag)) > 0;
 }
 
 int tedge_registration_url(char *buf, size_t len)
@@ -476,7 +459,7 @@ int tedge_credentials_replace(const uint8_t *der, size_t len)
 	}
 	memcpy(cert_der, der, len);
 	cert_der_len = len;
-	(void)settings_save_one(TEDGE_KEY_ENROLL_CERT, cert_der, cert_der_len);
+	(void)tedge_port_kv_set(TEDGE_KEY_ENROLL_CERT, cert_der, cert_der_len);
 	credentials_ready = false; /* re-register under the same tag */
 	return register_credentials();
 }
@@ -531,9 +514,9 @@ static int enroll_once(void)
 		LOG_ERR("could not read the certificate from the reply (%d)", ret);
 		return ret;
 	}
-	(void)settings_save_one(TEDGE_KEY_ENROLL_CERT, cert_der, cert_der_len);
-	(void)settings_delete(TEDGE_KEY_ENROLL_OTP);
-	(void)settings_delete(TEDGE_KEY_ENROLL_OTP_EXT);
+	(void)tedge_port_kv_set(TEDGE_KEY_ENROLL_CERT, cert_der, cert_der_len);
+	(void)tedge_port_kv_delete(TEDGE_KEY_ENROLL_OTP);
+	(void)tedge_port_kv_delete(TEDGE_KEY_ENROLL_OTP_EXT);
 	memset(otp, 0, sizeof(otp));
 	LOG_INF("enrolled: certificate stored (%zu B)", cert_der_len);
 	return 0;
@@ -551,7 +534,7 @@ int tedge_auth_prepare(char *id_out, size_t id_len)
 	}
 
 	if (cert_der_len == 0) {
-		cert_der_len = settings_get(TEDGE_KEY_ENROLL_CERT, cert_der,
+		cert_der_len = stored(TEDGE_KEY_ENROLL_CERT, cert_der,
 					    sizeof(cert_der));
 	}
 	ret = ensure_key();
@@ -562,8 +545,8 @@ int tedge_auth_prepare(char *id_out, size_t id_len)
 		/* Enrolled: any password still stored is a leftover of that
 		 * enrollment (a newly supplied one would have discarded the
 		 * certificate, see tedge_set_enroll_otp()). */
-		(void)settings_delete(TEDGE_KEY_ENROLL_OTP);
-		(void)settings_delete(TEDGE_KEY_ENROLL_OTP_EXT);
+		(void)tedge_port_kv_delete(TEDGE_KEY_ENROLL_OTP);
+		(void)tedge_port_kv_delete(TEDGE_KEY_ENROLL_OTP_EXT);
 		memset(otp, 0, sizeof(otp));
 		return register_credentials();
 	}

@@ -1,17 +1,15 @@
 /* SPDX-License-Identifier: Apache-2.0
  *
- * The Zephyr side of the port interface's small services: kernel
- * (tedge/port/os.h), logging (tedge/port/log.h) and the device
- * (tedge/port/device.h). Each is a thin call into the Zephyr API.
+ * The Zephyr side of the port interface's logging (tedge/port/log.h) and
+ * device (tedge/port/device.h) services. The kernel's are in
+ * tedge_port_os.c.
  */
 
 #include <tedge/port/device.h>
 #include <tedge/port/log.h>
-#include <tedge/port/os.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log_ctrl.h>
-#include <zephyr/random/random.h>
 #include <zephyr/sys/util.h>
 
 #if defined(CONFIG_HWINFO)
@@ -19,26 +17,6 @@
 #endif
 
 #include <errno.h>
-
-void tedge_port_mutex_lock(tedge_port_mutex_t *mutex)
-{
-	(void)k_mutex_lock(mutex, K_FOREVER);
-}
-
-void tedge_port_mutex_unlock(tedge_port_mutex_t *mutex)
-{
-	(void)k_mutex_unlock(mutex);
-}
-
-int64_t tedge_port_uptime_ms(void)
-{
-	return k_uptime_get();
-}
-
-uint32_t tedge_port_random32(void)
-{
-	return sys_rand32_get();
-}
 
 /* The tedge_log_level values are Zephyr's LOG_LEVEL_* values, so a level
  * passes through as it is. */
@@ -59,6 +37,11 @@ int tedge_port_log_set_level(enum tedge_log_level level)
 	ARG_UNUSED(level);
 	return -ENOTSUP;
 #endif
+}
+
+void tedge_port_log_flush(void)
+{
+	log_flush();
 }
 
 int tedge_port_reset_cause(uint32_t *cause)

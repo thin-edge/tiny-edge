@@ -22,8 +22,9 @@ target_sources(app PRIVATE
   ../../../../core/src/tedge_telemetry.c
   ../../../../core/src/tedge_json.c
   ../../../../core/src/tedge_shell_allow_list.c
-  ../../src/tedge_log_ring.c
+  ../../../../core/src/tedge_log_ring.c
   ../../src/tedge_port.c
+  ../../src/tedge_port_os.c
   ../../../../core/src/tedge_op_json.c
   ../../../../core/src/tedge_parameters.c
   ../../../../core/src/tedge_otp.c
@@ -36,6 +37,9 @@ target_compile_definitions(app PRIVATE
   # As the module itself: gmtime_r() is POSIX (see ports/zephyr/CMakeLists.txt).
   _POSIX_C_SOURCE=200809L
   CONFIG_TEDGE_TELEMETRY=1
+  # The port's kernel services need the client's thread priority and heap.
+  CONFIG_TEDGE_THREAD_PRIORITY=7
+  CONFIG_TEDGE_HEAP_SIZE=1024
   CONFIG_TEDGE_TELEMETRY_BUFFER_BYTES=512
   # The module's log level comes from its Kconfig, which is not part of a
   # test build.

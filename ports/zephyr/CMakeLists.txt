@@ -17,8 +17,11 @@ if(CONFIG_TEDGE)
   zephyr_library_sources(
     ${TEDGE_CORE_SRC}/tedge_version.c
     ${TEDGE_CORE_SRC}/tedge_core.c
+    ${TEDGE_CORE_SRC}/tedge_device.c
     src/tedge_platform.c
     src/tedge_port.c
+    src/tedge_port_os.c
+    src/tedge_port_kv.c
     src/tedge_time.c
     ${TEDGE_CORE_SRC}/tedge_backoff.c
     ${TEDGE_CORE_SRC}/tedge_json.c
@@ -49,13 +52,15 @@ if(CONFIG_TEDGE)
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_LOG_UPLOAD
     ${TEDGE_CORE_SRC}/tedge_log_upload.c
-    src/tedge_log_ring.c
+    ${TEDGE_CORE_SRC}/tedge_log_ring.c
+    src/tedge_log_backend.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_PARAMETERS ${TEDGE_CORE_SRC}/tedge_parameters.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_PARAMETERS_SELF
     ${TEDGE_CORE_SRC}/tedge_self_params.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_COREDUMP src/tedge_coredump.c)
+  zephyr_library_sources_ifdef(CONFIG_SHELL src/tedge_shell.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_CERT_RENEWAL
     ${TEDGE_CORE_SRC}/tedge_cert_renew.c
     ${TEDGE_CORE_SRC}/tedge_cert_decision.c

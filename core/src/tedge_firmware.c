@@ -17,12 +17,14 @@
  */
 
 #include "tedge_internal.h"
+#include "tedge_util.h"
 
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
+#include <tedge/port/kv.h>
+#include <tedge/port/log.h>
+#include <tedge/port/os.h>
+
 #include <zephyr/dfu/flash_img.h>
 #include <zephyr/dfu/mcuboot.h>
-#include <zephyr/settings/settings.h>
 #include <zephyr/storage/flash_map.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -30,7 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_DECLARE();
 
 #define MARKER_SEPARATOR ','
 
@@ -48,11 +50,11 @@ static int last_progress_percent;
 static int64_t last_progress_bytes;
 static bool job_running;
 
-static struct k_thread dl_thread;
-static K_THREAD_STACK_DEFINE(dl_stack, CONFIG_TEDGE_FIRMWARE_STACK_SIZE);
+static tedge_port_thread_t dl_thread;
+TEDGE_PORT_STACK_DEFINE(dl_stack, TEDGE_FIRMWARE_STACK_SIZE);
 
 /* Results for the client thread (the MQTT client is not thread-safe). */
-K_MSGQ_DEFINE(fw_events, sizeof(struct tedge_fw_event), 2, 4);
+TEDGE_PORT_MSGQ_DEFINE(fw_events, sizeof(struct tedge_fw_event), 2);
 
 static void post(enum tedge_fw_event_type type, const char *fmt, ...)
 {
@@ -62,12 +64,12 @@ static void post(enum tedge_fw_event_type type, const char *fmt, ...)
 	va_start(ap, fmt);
 	vsnprintf(ev.text, sizeof(ev.text), fmt, ap);
 	va_end(ap);
-	(void)k_msgq_put(&fw_events, &ev, K_NO_WAIT);
+	(void)tedge_port_msgq_put(&fw_events, &ev);
 }
 
 int tedge_fw_poll_event(struct tedge_fw_event *ev)
 {
-	return k_msgq_get(&fw_events, ev, K_NO_WAIT);
+	return tedge_port_msgq_get(&fw_events, ev);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -96,7 +98,7 @@ int tedge_fw_running_version(char *buf, size_t len)
 static void publish_progress(const char *phase, int percent, int64_t bytes,
 			     const char *reason)
 {
-#if defined(CONFIG_TEDGE_FIRMWARE_PROGRESS)
+#if defined(TEDGE_FIRMWARE_PROGRESS)
 	char json[240];
 	size_t n;
 
@@ -126,10 +128,10 @@ static void publish_progress(const char *phase, int percent, int64_t bytes,
 		(void)tedge_c8y_publish_progress("firmware", json);
 	}
 #else
-	ARG_UNUSED(phase);
-	ARG_UNUSED(percent);
-	ARG_UNUSED(bytes);
-	ARG_UNUSED(reason);
+	TEDGE_UNUSED(phase);
+	TEDGE_UNUSED(percent);
+	TEDGE_UNUSED(bytes);
+	TEDGE_UNUSED(reason);
 #endif
 }
 
@@ -139,65 +141,42 @@ static void publish_progress(const char *phase, int percent, int64_t bytes,
 
 static char marker[80];
 
-static int marker_cb(const char *key, size_t len, settings_read_cb read_cb,
-		     void *cb_arg, void *param)
-{
-	ARG_UNUSED(key);
-	ARG_UNUSED(param);
-	if (len > 0 && len < sizeof(marker)) {
-		ssize_t n = read_cb(cb_arg, marker, len);
-
-		marker[MAX(n, 0)] = '\0';
-	}
-	return 0;
-}
 
 /* The operation that asked for this update finishes after a reboot, so its
  * id is kept beside the marker. It is a separate key on purpose: the marker
  * itself is a contract between firmware versions and must not change shape.
  */
-static int op_id_cb(const char *key, size_t len, settings_read_cb read_cb,
-		    void *cb_arg, void *param)
-{
-	char *out = param;
-
-	ARG_UNUSED(key);
-	if (len > 0 && len < 24) {
-		ssize_t n = read_cb(cb_arg, out, len);
-
-		out[MAX(n, 0)] = '\0';
-	}
-	return 0;
-}
-
 void tedge_fw_remember_operation(const char *id)
 {
 	if (id == NULL || id[0] == '\0') {
-		(void)settings_delete(TEDGE_KEY_FIRMWARE_OP);
+		(void)tedge_port_kv_delete(TEDGE_KEY_FIRMWARE_OP);
 		return;
 	}
-	(void)settings_save_one(TEDGE_KEY_FIRMWARE_OP, id, strlen(id) + 1);
+	(void)tedge_port_kv_set(TEDGE_KEY_FIRMWARE_OP, id, strlen(id) + 1);
 }
 
 int tedge_fw_operation_id(char *out, size_t len)
 {
+	int n;
+
 	if (out == NULL || len == 0) {
 		return -EINVAL;
 	}
-	out[0] = '\0';
-	(void)settings_load_subtree_direct(TEDGE_KEY_FIRMWARE_OP, op_id_cb,
-					   out);
+	n = tedge_port_kv_get(TEDGE_KEY_FIRMWARE_OP, out, len - 1);
+	out[(n > 0) ? n : 0] = '\0';
 	if (out[0] == '\0') {
 		return -ENOENT;
 	}
 	/* One operation, one answer: the id goes once the update is over. */
-	(void)settings_delete(TEDGE_KEY_FIRMWARE_OP);
+	(void)tedge_port_kv_delete(TEDGE_KEY_FIRMWARE_OP);
 	return 0;
 }
 
 static void marker_load(void)
 {
-	(void)settings_load_subtree_direct(TEDGE_KEY_FIRMWARE, marker_cb, NULL);
+	int n = tedge_port_kv_get(TEDGE_KEY_FIRMWARE, marker, sizeof(marker) - 1);
+
+	marker[(n > 0) ? n : 0] = '\0';
 }
 
 static void marker_save(const char *name, const char *version, int64_t total)
@@ -207,44 +186,32 @@ static void marker_save(const char *name, const char *version, int64_t total)
 			 version);
 
 	if (n > 0 && n < (int)sizeof(buf)) {
-		(void)settings_save_one(TEDGE_KEY_FIRMWARE, buf, n);
+		(void)tedge_port_kv_set(TEDGE_KEY_FIRMWARE, buf, n);
 	}
 	/* The size travels in its own key: an older image on the other side of
 	 * the swap parses the marker, and its format must stay as it was. */
 	n = snprintf(buf, sizeof(buf), "%lld", (long long)total);
 	if (n > 0 && n < (int)sizeof(buf)) {
-		(void)settings_save_one(TEDGE_KEY_FIRMWARE_SIZE, buf, n);
+		(void)tedge_port_kv_set(TEDGE_KEY_FIRMWARE_SIZE, buf, n);
 	}
 }
 
 static void marker_clear(void)
 {
 	marker[0] = '\0';
-	(void)settings_delete(TEDGE_KEY_FIRMWARE);
-	(void)settings_delete(TEDGE_KEY_FIRMWARE_SIZE);
+	(void)tedge_port_kv_delete(TEDGE_KEY_FIRMWARE);
+	(void)tedge_port_kv_delete(TEDGE_KEY_FIRMWARE_SIZE);
 }
 
 /* The size of the image that was installed, written beside the marker. */
 static char size_text[24];
 
-static int size_cb(const char *key, size_t len, settings_read_cb read_cb,
-		   void *cb_arg, void *param)
-{
-	ARG_UNUSED(key);
-	ARG_UNUSED(param);
-	if (len > 0 && len < sizeof(size_text)) {
-		ssize_t n = read_cb(cb_arg, size_text, len);
-
-		size_text[MAX(n, 0)] = '\0';
-	}
-	return 0;
-}
-
 static int64_t size_load(void)
 {
-	size_text[0] = '\0';
-	(void)settings_load_subtree_direct(TEDGE_KEY_FIRMWARE_SIZE, size_cb,
-					   NULL);
+	int n = tedge_port_kv_get(TEDGE_KEY_FIRMWARE_SIZE, size_text,
+				  sizeof(size_text) - 1);
+
+	size_text[(n > 0) ? n : 0] = '\0';
 	return (size_text[0] != '\0') ? strtoll(size_text, NULL, 10) : 0;
 }
 
@@ -254,12 +221,12 @@ static int64_t size_load(void)
 
 static int write_sink(const void *data, size_t len, void *user_data)
 {
-	ARG_UNUSED(user_data);
+	TEDGE_UNUSED(user_data);
 	int ret = flash_img_buffered_write(&flash_ctx, (const uint8_t *)data,
 					   len, false);
 
 	if (ret != 0) {
-		LOG_ERR("firmware: writing to the slot failed (%d)", ret);
+		TEDGE_LOG_ERR("firmware: writing to the slot failed (%d)", ret);
 	}
 	return ret;
 }
@@ -276,7 +243,7 @@ static void report_progress(int64_t written, void *user_data)
 {
 	int percent = -1;
 
-	ARG_UNUSED(user_data);
+	TEDGE_UNUSED(user_data);
 	bool first = (last_progress_at == 0);
 
 	image_total = dl_req.total;
@@ -284,22 +251,22 @@ static void report_progress(int64_t written, void *user_data)
 		percent = (int)((written * 100) / image_total);
 		if (!first &&
 		    percent <
-			    last_progress_percent + CONFIG_TEDGE_FIRMWARE_PROGRESS_PERCENT) {
+			    last_progress_percent + TEDGE_FIRMWARE_PROGRESS_PERCENT) {
 			return;
 		}
 	} else if (!first && written < last_progress_bytes + PROGRESS_BYTES_STEP) {
 		return;
 	}
-	if (!first && k_uptime_get() - last_progress_at < 1000) {
+	if (!first && tedge_port_uptime_ms() - last_progress_at < 1000) {
 		return; /* at most one a second */
 	}
 	last_progress_percent = (percent >= 0) ? percent : 0;
 	last_progress_bytes = written;
-	last_progress_at = k_uptime_get();
+	last_progress_at = tedge_port_uptime_ms();
 	publish_progress("downloading", percent, written, NULL);
 }
 
-static void download_thread(void *a, void *b, void *c)
+static void download_thread(void *arg)
 {
 	struct tedge_download req = {
 		.url = job.url,
@@ -308,13 +275,11 @@ static void download_thread(void *a, void *b, void *c)
 		.progress = report_progress,
 		.timeout_ms = 120000,
 	};
-	int64_t t0 = k_uptime_get();
+	int64_t t0 = tedge_port_uptime_ms();
 	int ret;
 
 	dl_req = req;
-	ARG_UNUSED(a);
-	ARG_UNUSED(b);
-	ARG_UNUSED(c);
+	TEDGE_UNUSED(arg);
 
 	last_progress_percent = 0;
 	last_progress_bytes = 0;
@@ -337,8 +302,8 @@ static void download_thread(void *a, void *b, void *c)
 		return;
 	}
 
-	LOG_INF("firmware: %lld B written in %lld s", (long long)dl_req.written,
-		(k_uptime_get() - t0) / 1000);
+	TEDGE_LOG_INF("firmware: %lld B written in %lld s", (long long)dl_req.written,
+		(tedge_port_uptime_ms() - t0) / 1000);
 	publish_progress("installing", 100, dl_req.written, NULL);
 
 	/* From here the device is about to go dark for the swap. */
@@ -353,8 +318,8 @@ static void download_thread(void *a, void *b, void *c)
 		return;
 	}
 	post(TEDGE_FW_REBOOTING, "installing %s", job.version);
-	k_msleep(1500); /* let the report and the progress leave */
-	tedge_platform_reset();
+	tedge_port_sleep_ms(1500); /* let the report and the progress leave */
+	tedge_device_reset();
 }
 
 /* ------------------------------------------------------------------------ */
@@ -364,31 +329,29 @@ static void download_thread(void *a, void *b, void *c)
 /* A test-booted image that never reaches the cloud would otherwise run for
  * ever: the network is up, so nothing else resets the device and the
  * bootloader never gets to roll it back. */
-static void confirm_deadline_fn(struct k_work *work)
+static void confirm_deadline_fn(void)
 {
-	ARG_UNUSED(work);
-
 	if (boot_is_img_confirmed()) {
 		return;
 	}
-	LOG_ERR("firmware: this image has not confirmed itself within %d s; "
+	TEDGE_LOG_ERR("firmware: this image has not confirmed itself within %d s; "
 		"resetting so the bootloader can roll it back",
-		CONFIG_TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S);
-	tedge_platform_reset();
+		TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S);
+	tedge_device_reset();
 }
 
-static K_WORK_DELAYABLE_DEFINE(confirm_deadline, confirm_deadline_fn);
+TEDGE_PORT_DELAYED_WORK_DEFINE(confirm_deadline, confirm_deadline_fn);
 
 void tedge_fw_arm_confirm_deadline(void)
 {
-	if (CONFIG_TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S == 0 ||
+	if (TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S == 0 ||
 	    boot_is_img_confirmed()) {
 		return;
 	}
-	LOG_INF("firmware: running an unconfirmed image; it has %d s to "
-		"confirm itself", CONFIG_TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S);
-	(void)k_work_schedule(&confirm_deadline,
-			      K_SECONDS(CONFIG_TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S));
+	TEDGE_LOG_INF("firmware: running an unconfirmed image; it has %d s to "
+		"confirm itself", TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S);
+	tedge_port_delayed_work_schedule(
+		&confirm_deadline, TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S * 1000);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -408,7 +371,7 @@ int tedge_fw_request(const char *line, char *reason, size_t rlen)
 		return -EINVAL;
 	}
 	if (job_running) {
-		LOG_WRN("firmware: refused %s: an update is already running",
+		TEDGE_LOG_WRN("firmware: refused %s: an update is already running",
 			version);
 		snprintf(reason, rlen, "an update is already running");
 		return -EBUSY;
@@ -419,7 +382,7 @@ int tedge_fw_request(const char *line, char *reason, size_t rlen)
 	(void)tedge_fw_running_version(running, sizeof(running));
 	if (tedge_fw_is_running(tedge_identity()->firmware_name, running, name,
 				version)) {
-		LOG_INF("firmware: refused %s %s: it is already running", name,
+		TEDGE_LOG_INF("firmware: refused %s %s: it is already running", name,
 			version);
 		snprintf(reason, rlen, "%s %s is already running", name, version);
 		return -EALREADY;
@@ -432,13 +395,11 @@ int tedge_fw_request(const char *line, char *reason, size_t rlen)
 		return -ENOSPC;
 	}
 
-	LOG_INF("firmware: installing %s %s", job.name, job.version);
+	TEDGE_LOG_INF("firmware: installing %s %s", job.name, job.version);
 	job_running = true;
-	k_thread_create(&dl_thread, dl_stack, K_THREAD_STACK_SIZEOF(dl_stack),
-			download_thread, NULL, NULL, NULL,
-			K_PRIO_PREEMPT(CONFIG_TEDGE_THREAD_PRIORITY), 0,
-			K_NO_WAIT);
-	k_thread_name_set(&dl_thread, "tedge_fw");
+	(void)tedge_port_thread_start(&dl_thread, dl_stack,
+				      TEDGE_PORT_STACK_SIZEOF(dl_stack),
+				      download_thread, NULL, "tedge_fw");
 	return 0;
 }
 
@@ -477,7 +438,7 @@ void tedge_fw_on_connected(void)
 	case TEDGE_FW_BOOT_REVERTED:
 		/* We are running a confirmed image that is not the one that was
 		 * installed: MCUboot reverted it. */
-		LOG_WRN("firmware: %s did not come up; running %s", job.version,
+		TEDGE_LOG_WRN("firmware: %s did not come up; running %s", job.version,
 			version);
 		post(TEDGE_FW_REVERTED,
 		     "%s was rolled back; the device is running %s", job.version,
@@ -496,7 +457,7 @@ void tedge_fw_on_connected(void)
 		int rc = hooks->firmware_confirm_check(hooks->user_data);
 
 		if (rc != 0) {
-			LOG_WRN("firmware: the application refused %s (%d); it "
+			TEDGE_LOG_WRN("firmware: the application refused %s (%d); it "
 				"will be rolled back on the next reset",
 				job.version, rc);
 			post(TEDGE_FW_FAILED,
@@ -507,15 +468,15 @@ void tedge_fw_on_connected(void)
 			return; /* leave it unconfirmed on purpose */
 		}
 	}
-	if (IS_ENABLED(CONFIG_TEDGE_FIRMWARE_CONFIRM_AFTER_CONNECT)) {
+	if (IS_ENABLED(TEDGE_FIRMWARE_CONFIRM_AFTER_CONNECT)) {
 		int rc = boot_write_img_confirmed();
 
 		if (rc != 0) {
-			LOG_ERR("firmware: could not confirm the image (%d)", rc);
+			TEDGE_LOG_ERR("firmware: could not confirm the image (%d)", rc);
 			return;
 		}
-		(void)k_work_cancel_delayable(&confirm_deadline);
-		LOG_INF("firmware: %s confirmed", job.version);
+		tedge_port_delayed_work_cancel(&confirm_deadline);
+		TEDGE_LOG_INF("firmware: %s confirmed", job.version);
 		post(TEDGE_FW_INSTALLED, "%s", job.version);
 		publish_progress("done", 100, image_total, NULL);
 		marker_clear();

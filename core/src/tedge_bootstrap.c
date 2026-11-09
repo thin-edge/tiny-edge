@@ -11,12 +11,13 @@
 
 #include "tedge_internal.h"
 
+#include <tedge/port/kv.h>
+
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/mqtt.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
-#include <zephyr/settings/settings.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -61,32 +62,18 @@ int tedge_set_bootstrap_credentials(const char *user, const char *password)
 /* Settings                                                                  */
 /* ------------------------------------------------------------------------ */
 
-struct blob {
-	char *buf;
-	size_t cap;
-	size_t len;
-};
-
-static int load_cb(const char *key, size_t len, settings_read_cb read_cb,
-		   void *cb_arg, void *param)
+/* A stored string, without its NUL, into @p buf. */
+static void load_string(const char *key, char *buf, size_t cap)
 {
-	struct blob *b = param;
+	int n = tedge_port_kv_get(key, buf, cap - 1);
 
-	ARG_UNUSED(key);
-	if (len < b->cap) {
-		b->len = read_cb(cb_arg, b->buf, len);
-		b->buf[b->len] = '\0';
-	}
-	return 0;
+	buf[(n > 0) ? n : 0] = '\0';
 }
 
 static void load_stored(void)
 {
-	struct blob u = { .buf = dev_user, .cap = sizeof(dev_user) };
-	struct blob p = { .buf = dev_password, .cap = sizeof(dev_password) };
-
-	(void)settings_load_subtree_direct(TEDGE_KEY_BOOTSTRAP_USER, load_cb, &u);
-	(void)settings_load_subtree_direct(TEDGE_KEY_BOOTSTRAP_PASS, load_cb, &p);
+	load_string(TEDGE_KEY_BOOTSTRAP_USER, dev_user, sizeof(dev_user));
+	load_string(TEDGE_KEY_BOOTSTRAP_PASS, dev_password, sizeof(dev_password));
 	have_credentials = (dev_user[0] != '\0' && dev_password[0] != '\0');
 	if (have_credentials) {
 		LOG_INF("device credentials found for \"%s\"", dev_user);
@@ -113,9 +100,9 @@ static void parse_credentials(const char *line)
 	}
 	snprintf(dev_user, sizeof(dev_user), "%s/%s", tenant, user);
 	snprintf(dev_password, sizeof(dev_password), "%s", password);
-	(void)settings_save_one(TEDGE_KEY_BOOTSTRAP_USER, dev_user,
+	(void)tedge_port_kv_set(TEDGE_KEY_BOOTSTRAP_USER, dev_user,
 				strlen(dev_user));
-	(void)settings_save_one(TEDGE_KEY_BOOTSTRAP_PASS, dev_password,
+	(void)tedge_port_kv_set(TEDGE_KEY_BOOTSTRAP_PASS, dev_password,
 				strlen(dev_password));
 	memset(password, 0, sizeof(password));
 	have_credentials = true;

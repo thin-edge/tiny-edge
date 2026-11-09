@@ -10,13 +10,14 @@
 
 #include "tedge_internal.h"
 
+#include <tedge/port/kv.h>
+
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/net/mqtt.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
-#include <zephyr/settings/settings.h>
 #include <zephyr/sys/clock.h>
 #include <errno.h>
 #include <stdio.h>
@@ -361,40 +362,38 @@ static void handle_restart(void)
 	 * has to survive the reboot too. An empty id means "the oldest
 	 * restart operation", which is all the static path can say. */
 	if (current_op_id[0] != '\0') {
-		(void)settings_save_one(TEDGE_KEY_RESTART, current_op_id,
+		(void)tedge_port_kv_set(TEDGE_KEY_RESTART, current_op_id,
 					strlen(current_op_id) + 1);
 	} else {
-		(void)settings_save_one(TEDGE_KEY_RESTART, &one, sizeof(one));
+		(void)tedge_port_kv_set(TEDGE_KEY_RESTART, &one, sizeof(one));
 	}
 	k_msleep(500);
 	mqtt_disconnect(&client, NULL);
 	k_msleep(300);
-	tedge_platform_reset();
+	tedge_device_reset();
 }
 
 /* The marker is either a single byte (the older format: "a restart was
  * asked for") or the id of the operation that asked. */
 static char restart_op_id[24];
 
-static int restart_marker_cb(const char *key, size_t len,
-			     settings_read_cb read_cb, void *cb_arg, void *param)
+static bool restart_marker_load(void)
 {
-	uint8_t v = 0;
+	int n = tedge_port_kv_get(TEDGE_KEY_RESTART, restart_op_id,
+				  sizeof(restart_op_id));
 
-	ARG_UNUSED(key);
-	if (len == sizeof(v) && read_cb(cb_arg, &v, sizeof(v)) == sizeof(v)) {
-		*(bool *)param = (v == 1);
-	} else if (len > 1 && len <= sizeof(restart_op_id)) {
-		ssize_t n = read_cb(cb_arg, restart_op_id,
-				    sizeof(restart_op_id));
+	if (n == 1) {
+		bool pending = ((uint8_t)restart_op_id[0] == 1);
 
-		if (n > 0) {
-			restart_op_id[MIN((size_t)n, sizeof(restart_op_id) - 1)] =
-				'\0';
-			*(bool *)param = true;
-		}
+		restart_op_id[0] = '\0';
+		return pending;
 	}
-	return 0;
+	if (n > 1) {
+		restart_op_id[MIN((size_t)n, sizeof(restart_op_id) - 1)] = '\0';
+		return true;
+	}
+	restart_op_id[0] = '\0';
+	return false;
 }
 #endif /* CONFIG_TEDGE_RESTART */
 
@@ -1159,7 +1158,7 @@ static int session_start(void)
 #if defined(CONFIG_TEDGE_RESTART)
 	if (restart_pending_after_boot) {
 		op_finish_by_id(restart_op_id, "c8y_Restart", true, NULL);
-		(void)settings_delete(TEDGE_KEY_RESTART);
+		(void)tedge_port_kv_delete(TEDGE_KEY_RESTART);
 		restart_pending_after_boot = false;
 		LOG_INF("restart operation reported as successful");
 	}
@@ -1408,9 +1407,7 @@ const struct tedge_transport *tedge_transport_get(void)
 
 	if (!marker_loaded) {
 		marker_loaded = true;
-		(void)settings_load_subtree_direct(TEDGE_KEY_RESTART,
-						   restart_marker_cb,
-						   &restart_pending_after_boot);
+		restart_pending_after_boot = restart_marker_load();
 		if (restart_pending_after_boot) {
 			LOG_INF("a restart operation is waiting to be reported");
 		}

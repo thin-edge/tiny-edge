@@ -70,12 +70,12 @@ void tedge_twin_republish(void);
 
 /**
  * Reset the device: the application's hook if it has one, else the
- * platform's full-system reset. Does not return.
+ * platform's full-system reset (tedge_device.c). Does not return.
  */
-FUNC_NORETURN void tedge_platform_reset(void);
+_Noreturn void tedge_device_reset(void);
 
-/** "<CONFIG_TEDGE_DEVICE_ID_PREFIX>-<MAC>" into @p buf. */
-int tedge_platform_default_id(char *buf, size_t len);
+/** "<TEDGE_DEVICE_ID_PREFIX>-<MAC>" into @p buf (tedge_device.c). */
+int tedge_default_device_id(char *buf, size_t len);
 
 /* --- SmartREST helpers (tedge_smartrest.c) ------------------------------- */
 
@@ -201,7 +201,8 @@ size_t tedge_log_types_line(char *out, size_t len);
 /** Registers the client's own log; called once at startup. */
 void tedge_log_upload_init(void);
 
-/** The client's own log, kept in RAM (tedge_log_ring.c). */
+/** The client's own log, kept in RAM (tedge_log_ring.c). The port feeds it
+ *  with tedge_log_ring_write(). */
 void tedge_log_ring_write(const uint8_t *data, size_t len);
 size_t tedge_log_ring_read(size_t offset, uint8_t *out, size_t len);
 size_t tedge_log_ring_size(void);
@@ -232,6 +233,11 @@ int tedge_params_apply(const char *set_name, const char *json, char *reason,
  */
 int tedge_params_schema(const char *set_name, char *out, size_t len);
 
+/** How many parameter sets are declared, and the name (and parameter
+ *  count) of each, for the port's console commands. */
+size_t tedge_params_set_count(void);
+const char *tedge_params_set_name(size_t index, size_t *count);
+
 /* The client's own tunables (tedge_self_params.c). Each is read where its
  * value is used, so a change needs nothing to be notified. Without
  * CONFIG_TEDGE_PARAMETERS_SELF the Kconfig value is used directly. */
@@ -254,13 +260,6 @@ bool tedge_self_remote_access_allowed(void);
  * false when the JSON is not an operation this client can answer at all.
  */
 bool tedge_operation_from_json(const char *json, char *line, size_t len);
-
-/* --- Crash dumps (tedge_coredump.c) -------------------------------------- */
-
-/** Offers a stored dump as a log type; called once at startup. */
-void tedge_coredump_init(void);
-/** The dump reached the cloud and may be erased. */
-void tedge_coredump_taken(void);
 
 /* --- Shell command (tedge_shell_cmd.c) ----------------------------------- */
 

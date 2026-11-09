@@ -662,8 +662,8 @@ tiny-edge/
     ├── include/tedge/        Zephyr-only public headers (mbedTLS config)
     ├── include/tedge_port/   the port interface's types and log macros
     ├── src/                  Zephyr-only sources: the port interface
-    │                         (tedge_port.c, time), platform, shell,
-    │                         log backend, coredump
+    │                         (tedge_port*.c, time, platform), the
+    │                         console commands, log backend, coredump
     ├── profiles/             feature sets (minimal, ota, full) and per-board
     │                         sizing (boards/, extras/)
     ├── samples/minimal/      builds with Zephyr and this module only
