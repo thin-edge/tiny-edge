@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.0](https://github.com/thin-edge/tiny-edge/compare/v0.1.0...v0.2.0) (2026-11-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** struct tedge_remote_target, passed to the remote_access_allow hook, carries the target as `host` (as the operator named it) and `ipv4` (4 bytes, network order) instead of a Zephyr `struct sockaddr *addr`. tedge.h no longer includes a Zephyr network header for it.
+
+### Bug Fixes
+
+* build on a 64-bit host and with warnings as errors ([f2f7551](https://github.com/thin-edge/tiny-edge/commit/f2f7551933b000d72707a0bb3b31825dbbc61a4f))
+* **firmware:** never cut the installed-version message ([035262d](https://github.com/thin-edge/tiny-edge/commit/035262d5ad79e24d80f4bf0f6323256bb50573e4))
+* print 64-bit durations portably ([93ccd70](https://github.com/thin-edge/tiny-edge/commit/93ccd70096f2cfcef9cf23f4b06947fddb917acd))
+* **telemetry:** refuse a type longer than 39 characters instead of cutting it ([f442f4c](https://github.com/thin-edge/tiny-edge/commit/f442f4c0898bc3adc343e51c8ff0f8809c67a7cc))
+
+
+### Refactoring
+
+* **core:** speak WebSocket in the core, and move remote access onto the port ([cfe1e1c](https://github.com/thin-edge/tiny-edge/commit/cfe1e1cf9da5fe4cbdfe66e4701887a681643ef3))
+
 ## [0.1.0](https://github.com/thin-edge/tiny-edge/compare/v0.0.2...v0.1.0) (2026-11-03)
 
 
