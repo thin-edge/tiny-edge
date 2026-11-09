@@ -23,6 +23,7 @@ target_sources(app PRIVATE
   ../../../../core/src/tedge_json.c
   ../../../../core/src/tedge_shell_allow_list.c
   ../../src/tedge_log_ring.c
+  ../../src/tedge_port.c
   ../../../../core/src/tedge_op_json.c
   ../../../../core/src/tedge_parameters.c
   ../../../../core/src/tedge_otp.c
@@ -49,3 +50,9 @@ target_compile_definitions(app PRIVATE
   CONFIG_TEDGE_PARAMETERS_SCHEMA=1
 )
 target_include_directories(app PRIVATE ../../../../include ../../include ../../../../core/src)
+
+# The core reads the CONFIG_TEDGE_* values above as TEDGE_*, through the
+# header the module generates (see ports/zephyr/cmake/tedge_config.cmake).
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/tedge_config.cmake)
+tedge_generate_config(${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

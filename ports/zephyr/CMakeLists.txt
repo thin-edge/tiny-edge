@@ -18,6 +18,7 @@ if(CONFIG_TEDGE)
     ${TEDGE_CORE_SRC}/tedge_version.c
     ${TEDGE_CORE_SRC}/tedge_core.c
     src/tedge_platform.c
+    src/tedge_port.c
     src/tedge_time.c
     ${TEDGE_CORE_SRC}/tedge_backoff.c
     ${TEDGE_CORE_SRC}/tedge_json.c
@@ -80,6 +81,12 @@ if(CONFIG_TEDGE)
   # (include/tedge/mbedtls_user_config.h, which mbedTLS itself includes).
   zephyr_include_directories(${TEDGE_ROOT}/include include)
   zephyr_library_include_directories(${TEDGE_CORE_SRC})
+
+  # The core reads its configuration as TEDGE_* from <tedge_config.h>,
+  # generated from this port's Kconfig (cmake/tedge_config.cmake).
+  include(${CMAKE_CURRENT_LIST_DIR}/cmake/tedge_config.cmake)
+  tedge_generate_config(${CMAKE_CURRENT_BINARY_DIR}/generated)
+  zephyr_library_include_directories(${CMAKE_CURRENT_BINARY_DIR}/generated)
 
   # Trust anchors: every PEM in CONFIG_TEDGE_C8Y_CA_FILES is concatenated
   # into one bundle and embedded as tedge_ca_bundle.inc.

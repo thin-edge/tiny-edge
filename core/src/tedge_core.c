@@ -391,9 +391,9 @@ static void client_thread(void *a, void *b, void *c)
 		if (!wait_for_network()) {
 			break;
 		}
-		if (!tedge_time_is_valid()) {
+		if (!tedge_port_time_is_valid()) {
 			tedge_set_state(TEDGE_STATE_WAITING_TIME);
-			if (tedge_time_sync() != 0) {
+			if (tedge_port_time_sync() != 0) {
 				k_sleep(K_SECONDS(5));
 				continue;
 			}

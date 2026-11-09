@@ -26,7 +26,7 @@ Modbus TCP, OPC-UA, and SNMP servers with tiny-edge built in.
 tiny-edge/
 ├── include/tedge/
 │   ├── tedge.h          the public API, the same on every RTOS
-│   └── port/            the port interface (planned): what each port implements
+│   └── port/            the port interface: what each port implements
 ├── core/                the client: Cumulocity protocol, operations, parameters,
 │                        telemetry buffering, and the decision logic
 ├── ports/
@@ -64,9 +64,25 @@ The port interface sits at the transport level: a port provides a TLS byte
 stream, and the core speaks MQTT, HTTP, and WebSocket over it. One protocol
 implementation then serves every port, and a new port needs no protocol code.
 
+### The port interface
+
+`include/tedge/port/` lists what a port implements, one header per concern.
+Functions a port implements are prefixed `tedge_port_`.
+
+| Header | What the port provides |
+|---|---|
+| `config.h` | `<tedge_config.h>`: the build configuration as `TEDGE_*` macros. Zephyr generates it from Kconfig. |
+| `log.h` | `<tedge_port/log.h>`: the `TEDGE_LOG_*` macros on the RTOS's logging, and the run-time log level |
+| `os.h` | `<tedge_port/os.h>`: the mutex type; lock, uptime, and random numbers |
+| `time.h` | The wall clock: whether it is set, setting it from the network, reading it |
+| `device.h` | The reset cause |
+
+Network, TLS, settings, crypto, and firmware slots are added the same way
+as the core files that use them move behind the interface.
+
 The boundary is checked in CI. `scripts/check-portability.py` fails when
-code in `core/` or `include/tedge/tedge.h` uses an RTOS API, or when one
-port refers to another. The core came from a Zephyr-only client, so some of
+code in `core/`, `include/tedge/tedge.h`, or `include/tedge/port/` uses an
+RTOS API, or when one port refers to another. The core came from a Zephyr-only client, so some of
 its files still call Zephyr directly. The script lists them, and the list
 can only get shorter.
 

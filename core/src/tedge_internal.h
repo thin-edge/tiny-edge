@@ -13,6 +13,11 @@
 #define TEDGE_INTERNAL_H_
 
 #include <tedge/tedge.h>
+/* Every core file includes this header first, so none of them can test a
+ * TEDGE_* option before it is defined and quietly build without the
+ * feature. */
+#include <tedge/port/config.h>
+#include <tedge/port/time.h>
 
 #include <zephyr/kernel.h>
 #include <stdbool.h>
@@ -71,11 +76,6 @@ FUNC_NORETURN void tedge_platform_reset(void);
 
 /** "<CONFIG_TEDGE_DEVICE_ID_PREFIX>-<MAC>" into @p buf. */
 int tedge_platform_default_id(char *buf, size_t len);
-
-/** True once the realtime clock is plausible (set by SNTP or the app). */
-bool tedge_time_is_valid(void);
-/** Set the clock with SNTP unless it is already valid. */
-int tedge_time_sync(void);
 
 /* --- SmartREST helpers (tedge_smartrest.c) ------------------------------- */
 

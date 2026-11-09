@@ -7,9 +7,9 @@
  */
 
 #include "tedge_internal.h"
+#include "tedge_util.h"
 
-#include <zephyr/random/random.h>
-#include <zephyr/sys/util.h>
+#include <tedge/port/os.h>
 
 #define BACKOFF_MIN_S 3
 
@@ -25,7 +25,7 @@ uint32_t tedge_backoff_next(uint32_t current, uint32_t max)
 
 	if (spread > 0) {
 		next = (uint32_t)((int32_t)next - spread +
-				  (int32_t)(sys_rand32_get() % (2 * spread + 1)));
+				  (int32_t)(tedge_port_random32() % (2 * spread + 1)));
 	}
-	return MAX(next, (uint32_t)BACKOFF_MIN_S);
+	return TEDGE_MAX(next, (uint32_t)BACKOFF_MIN_S);
 }

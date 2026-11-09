@@ -658,8 +658,11 @@ tiny-edge/
 ├── certs/                    default trust anchors
 └── ports/zephyr/
     ├── CMakeLists.txt, Kconfig
+    ├── cmake/                generates <tedge_config.h> from Kconfig
     ├── include/tedge/        Zephyr-only public headers (mbedTLS config)
-    ├── src/                  Zephyr-only sources: platform, time, shell,
+    ├── include/tedge_port/   the port interface's types and log macros
+    ├── src/                  Zephyr-only sources: the port interface
+    │                         (tedge_port.c, time), platform, shell,
     │                         log backend, coredump
     ├── profiles/             feature sets (minimal, ota, full) and per-board
     │                         sizing (boards/, extras/)
@@ -674,7 +677,7 @@ failures that look alike, and the measurement traps that make a broken
 session look healthy.
 
 Some files in `core/` still call Zephyr directly; they are moving behind the
-port interface one at a time. `scripts/check-portability.py` lists them and
+port interface (`include/tedge/port/`) one at a time. `scripts/check-portability.py` lists them and
 stops new ones from appearing.
 
 ## Version

@@ -16,17 +16,19 @@
  */
 
 #include "tedge_internal.h"
+#include "tedge_util.h"
 
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/sys/clock.h>
+#include <tedge/port/config.h>
+#include <tedge/port/log.h>
+#include <tedge/port/os.h>
+#include <tedge/port/time.h>
 
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
-LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_DECLARE();
 
 /* One message in the buffer: a header, then the topic suffix and payload. */
 struct queued {
@@ -35,12 +37,12 @@ struct queued {
 	char text[];    /* "<type>\0<payload>\0" */
 };
 
-#define RING_BYTES CONFIG_TEDGE_TELEMETRY_BUFFER_BYTES
+#define RING_BYTES TEDGE_TELEMETRY_BUFFER_BYTES
 
 static uint8_t ring[RING_BYTES];
 static size_t ring_used;
 static uint32_t dropped;
-static K_MUTEX_DEFINE(ring_lock);
+TEDGE_PORT_MUTEX_DEFINE(ring_lock);
 
 /* ------------------------------------------------------------------------ */
 /* The buffer                                                                */
@@ -106,7 +108,7 @@ static int enqueue(enum tedge_msg_kind kind, const char *type,
 	if (plen > PAYLOAD_MAX || need > RING_BYTES) {
 		return -EMSGSIZE;
 	}
-	k_mutex_lock(&ring_lock, K_FOREVER);
+	tedge_port_mutex_lock(&ring_lock);
 	while (ring_used + need > RING_BYTES) {
 		if (!drop_oldest_measurement()) {
 			/* Only events and alarms left, and still no room: the
@@ -125,11 +127,11 @@ static int enqueue(enum tedge_msg_kind kind, const char *type,
 		ring_used += need;
 	}
 out:
-	k_mutex_unlock(&ring_lock);
+	tedge_port_mutex_unlock(&ring_lock);
 	if (rc == 0) {
 		tedge_telemetry_wake();
 	} else {
-		LOG_WRN("telemetry: no room for a %s message",
+		TEDGE_LOG_WRN("telemetry: no room for a %s message",
 			(kind == TEDGE_MSG_MEASUREMENT) ? "measurement"
 							: "event or alarm");
 	}
@@ -146,10 +148,10 @@ void tedge_telemetry_flush(void)
 		enum tedge_msg_kind kind;
 		struct queued *q;
 
-		k_mutex_lock(&ring_lock, K_FOREVER);
+		tedge_port_mutex_lock(&ring_lock);
 		q = first();
 		if (q == NULL) {
-			k_mutex_unlock(&ring_lock);
+			tedge_port_mutex_unlock(&ring_lock);
 			return;
 		}
 		kind = (enum tedge_msg_kind)q->kind;
@@ -157,14 +159,14 @@ void tedge_telemetry_flush(void)
 		tlen = strlen(q->text) + 1;
 		memcpy(type, q->text, tlen);
 		memcpy(payload, q->text + tlen, strlen(q->text + tlen) + 1);
-		k_mutex_unlock(&ring_lock);
+		tedge_port_mutex_unlock(&ring_lock);
 
 		if (tedge_c8y_publish_telemetry(kind, type, payload) != 0) {
 			return; /* still offline: keep it for the next round */
 		}
-		k_mutex_lock(&ring_lock, K_FOREVER);
+		tedge_port_mutex_lock(&ring_lock);
 		pop_first();
-		k_mutex_unlock(&ring_lock);
+		tedge_port_mutex_unlock(&ring_lock);
 	}
 }
 
@@ -182,7 +184,6 @@ uint32_t tedge_telemetry_dropped(void)
  * cloud stamps it on arrival. */
 static size_t put_time(char *buf, size_t len, int64_t timestamp_ms)
 {
-	struct timespec now;
 	struct tm tm;
 	char iso[24];
 	time_t secs;
@@ -190,11 +191,9 @@ static size_t put_time(char *buf, size_t len, int64_t timestamp_ms)
 	if (timestamp_ms > 0) {
 		secs = (time_t)(timestamp_ms / 1000);
 	} else {
-		if (!tedge_time_is_valid()) {
+		if (tedge_port_time_now(&secs) != 0) {
 			return 0;
 		}
-		(void)sys_clock_gettime(SYS_CLOCK_REALTIME, &now);
-		secs = now.tv_sec;
 	}
 	gmtime_r(&secs, &tm);
 	strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", &tm);
@@ -221,7 +220,7 @@ int tedge_publish_measurement(const char *type,
 	char json[224];
 	size_t n = 0;
 
-	if (!IS_ENABLED(CONFIG_TEDGE_TELEMETRY)) {
+	if (!TEDGE_IS_ENABLED(TEDGE_TELEMETRY)) {
 		return -ENOTSUP;
 	}
 	if (type == NULL || values == NULL || count == 0) {
@@ -248,7 +247,7 @@ int tedge_publish_event(const char *type, const char *text,
 	char escaped[160];
 	size_t n = 0;
 
-	if (!IS_ENABLED(CONFIG_TEDGE_TELEMETRY)) {
+	if (!TEDGE_IS_ENABLED(TEDGE_TELEMETRY)) {
 		return -ENOTSUP;
 	}
 	if (type == NULL || text == NULL) {
@@ -282,7 +281,7 @@ int tedge_raise_alarm(const char *type, enum tedge_alarm_severity severity,
 	char escaped[140];
 	size_t n = 0;
 
-	if (!IS_ENABLED(CONFIG_TEDGE_TELEMETRY)) {
+	if (!TEDGE_IS_ENABLED(TEDGE_TELEMETRY)) {
 		return -ENOTSUP;
 	}
 	if (type == NULL || text == NULL) {
@@ -299,7 +298,7 @@ int tedge_raise_alarm(const char *type, enum tedge_alarm_severity severity,
 
 int tedge_clear_alarm(const char *type)
 {
-	if (!IS_ENABLED(CONFIG_TEDGE_TELEMETRY)) {
+	if (!TEDGE_IS_ENABLED(TEDGE_TELEMETRY)) {
 		return -ENOTSUP;
 	}
 	if (type == NULL) {

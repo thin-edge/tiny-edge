@@ -6,6 +6,7 @@
  */
 
 #include "tedge_internal.h"
+#include <tedge/port/time.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -23,7 +24,7 @@ LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
 /* Anything before 2025-01-01 means "not set". */
 #define CLOCK_FLOOR 1735689600
 
-bool tedge_time_is_valid(void)
+bool tedge_port_time_is_valid(void)
 {
 	struct timespec ts;
 
@@ -33,13 +34,13 @@ bool tedge_time_is_valid(void)
 	return ts.tv_sec > CLOCK_FLOOR;
 }
 
-int tedge_time_sync(void)
+int tedge_port_time_sync(void)
 {
 #if defined(CONFIG_TEDGE_SNTP)
 	struct sntp_time t;
 	int rc;
 
-	if (tedge_time_is_valid()) {
+	if (tedge_port_time_is_valid()) {
 		return 0;
 	}
 	rc = sntp_simple(CONFIG_TEDGE_SNTP_SERVER, 5000, &t);
@@ -57,11 +58,23 @@ int tedge_time_sync(void)
 	LOG_INF("clock set from %s", CONFIG_TEDGE_SNTP_SERVER);
 	return 0;
 #else
-	if (tedge_time_is_valid()) {
+	if (tedge_port_time_is_valid()) {
 		return 0;
 	}
 	LOG_WRN("the clock is not set and CONFIG_TEDGE_SNTP is off: the "
 		"application must set it before the client can connect");
 	return -ENOTSUP;
 #endif
+}
+
+int tedge_port_time_now(time_t *secs)
+{
+	struct timespec ts;
+
+	if (sys_clock_gettime(SYS_CLOCK_REALTIME, &ts) != 0 ||
+	    ts.tv_sec <= CLOCK_FLOOR) {
+		return -EAGAIN;
+	}
+	*secs = ts.tv_sec;
+	return 0;
 }

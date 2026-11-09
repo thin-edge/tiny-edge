@@ -33,25 +33,19 @@ ROOT = Path(__file__).resolve().parent.parent
 # Core files that still use Zephyr directly. Remove an entry when its file
 # moves its RTOS calls behind the port interface. Never add one.
 KNOWN_RTOS_BOUND = {
-    "core/src/tedge_backoff.c",
     "core/src/tedge_bootstrap.c",
     "core/src/tedge_c8y.c",
     "core/src/tedge_cert_renew.c",
     "core/src/tedge_core.c",
     "core/src/tedge_enroll.c",
     "core/src/tedge_firmware.c",
-    "core/src/tedge_health.c",
     "core/src/tedge_http_download.c",
     "core/src/tedge_http_upload.c",
     "core/src/tedge_internal.h",
     "core/src/tedge_log_upload.c",
-    "core/src/tedge_op_json.c",
     "core/src/tedge_parameters.c",
     "core/src/tedge_ra_target.c",
     "core/src/tedge_remote_access.c",
-    "core/src/tedge_self_params.c",
-    "core/src/tedge_shell_allow_list.c",
-    "core/src/tedge_telemetry.c",
     "include/tedge/tedge.h",
 }
 

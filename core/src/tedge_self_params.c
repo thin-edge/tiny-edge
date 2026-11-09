@@ -22,12 +22,15 @@
 #include "tedge_internal.h"
 #include <tedge/tedge.h>
 
-#include <zephyr/logging/log.h>
-#include <zephyr/logging/log_ctrl.h>
+#include "tedge_util.h"
+
+#include <tedge/port/config.h>
+#include <tedge/port/log.h>
+
 #include <stdio.h>
 #include <string.h>
 
-LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_DECLARE();
 
 #define SELF_SET "zephyr_tedge"
 /* remote_access is a set of its own, declared only when remote access is
@@ -38,28 +41,29 @@ LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
  * exactly what every device declaring the set accepts. */
 #define RA_SET "zephyr_tedge_remote_access"
 
-/* Zephyr's severities, lowest first, so the index is the level. */
+/* The severities, lowest first, so the index is the level
+ * (enum tedge_log_level). */
 static const char *const log_levels[] = { "off", "err", "wrn", "inf", "dbg" };
 
 /* The build-time log level is the declared default, so a device starts
  * where its image says and only moves if someone asks it to. */
-#define DEFAULT_LOG_LEVEL log_levels[MIN(CONFIG_TEDGE_LOG_LEVEL,             \
-					 (int)ARRAY_SIZE(log_levels) - 1)]
+#define DEFAULT_LOG_LEVEL log_levels[TEDGE_MIN(TEDGE_LOG_LEVEL,             \
+					 (int)TEDGE_ARRAY_SIZE(log_levels) - 1)]
 
 static const struct tedge_parameter self_params[] = {
 	TEDGE_PARAM_ENUM("log_level", DEFAULT_LOG_LEVEL,
 			 ("off", "err", "wrn", "inf", "dbg"),
 			 "How much the client logs. Raise it on a device that "
 			 "is misbehaving, lower it when you are done."),
-#if defined(CONFIG_TEDGE_HEALTH)
-	TEDGE_PARAM_INT("health_interval_s", CONFIG_TEDGE_HEALTH_INTERVAL_S, 0,
+#if defined(TEDGE_HEALTH)
+	TEDGE_PARAM_INT("health_interval_s", TEDGE_HEALTH_INTERVAL_S, 0,
 			86400,
 			"Seconds between the client's own health "
 			"measurements. 0 stops them."),
 #endif
-#if defined(CONFIG_TEDGE_TRANSPORT_C8Y)
+#if defined(TEDGE_TRANSPORT_C8Y)
 	TEDGE_PARAM_INT("required_interval_min",
-			CONFIG_TEDGE_REQUIRED_INTERVAL_MIN, 0, 1440,
+			TEDGE_REQUIRED_INTERVAL_MIN, 0, 1440,
 			"Minutes of silence after which Cumulocity calls this "
 			"device offline. 0 disables the check. Cumulocity only "
 			"accepts this from the device while it has no "
@@ -68,7 +72,7 @@ static const struct tedge_parameter self_params[] = {
 #endif
 };
 
-#if defined(CONFIG_TEDGE_REMOTE_ACCESS)
+#if defined(TEDGE_REMOTE_ACCESS)
 static const struct tedge_parameter ra_params[] = {
 	TEDGE_PARAM_BOOL("remote_access", true,
 			 "Whether the cloud may open a tunnel to this device. "
@@ -85,7 +89,7 @@ static const struct tedge_parameter ra_params[] = {
 /* to be told about it.                                                      */
 /* ------------------------------------------------------------------------ */
 
-#if defined(CONFIG_TEDGE_HEALTH)
+#if defined(TEDGE_HEALTH)
 int tedge_self_health_interval_s(void)
 {
 	int32_t seconds;
@@ -94,11 +98,11 @@ int tedge_self_health_interval_s(void)
 	    0) {
 		return (int)seconds;
 	}
-	return CONFIG_TEDGE_HEALTH_INTERVAL_S;
+	return TEDGE_HEALTH_INTERVAL_S;
 }
 #endif
 
-#if defined(CONFIG_TEDGE_TRANSPORT_C8Y)
+#if defined(TEDGE_TRANSPORT_C8Y)
 int tedge_self_required_interval_min(void)
 {
 	int32_t minutes;
@@ -107,11 +111,11 @@ int tedge_self_required_interval_min(void)
 				    &minutes) == 0) {
 		return (int)minutes;
 	}
-	return CONFIG_TEDGE_REQUIRED_INTERVAL_MIN;
+	return TEDGE_REQUIRED_INTERVAL_MIN;
 }
 #endif
 
-#if defined(CONFIG_TEDGE_REMOTE_ACCESS)
+#if defined(TEDGE_REMOTE_ACCESS)
 bool tedge_self_remote_access_allowed(void)
 {
 	bool allowed;
@@ -128,46 +132,42 @@ bool tedge_self_remote_access_allowed(void)
 /* ------------------------------------------------------------------------ */
 
 /* The log level is the one value that has to be pushed somewhere rather
- * than read where it is used, because the filter lives in the logging
- * subsystem. Without CONFIG_LOG_RUNTIME_FILTERING there is nothing to push
- * it into, and the parameter is still reported and stored — it simply takes
- * effect at the next boot, which the help text says. */
+ * than read where it is used, because the filter lives in the RTOS's
+ * logging. A build that cannot change it at run time still reports and
+ * stores the parameter: it simply takes effect at the next boot, which the
+ * help text says. */
 static void apply_log_level(void)
 {
-#if defined(CONFIG_LOG_RUNTIME_FILTERING)
 	char level[8];
-	int source;
 
+	if (!TEDGE_IS_ENABLED(TEDGE_PORT_LOG_RUNTIME_LEVEL)) {
+		return;
+	}
 	if (tedge_parameter_get_string(SELF_SET, "log_level", level,
 				       sizeof(level)) != 0) {
 		return;
 	}
-	source = log_source_id_get(STRINGIFY(LOG_MODULE_NAME));
-	if (source < 0) {
-		return;
-	}
-	for (size_t i = 0; i < ARRAY_SIZE(log_levels); i++) {
+	for (size_t i = 0; i < TEDGE_ARRAY_SIZE(log_levels); i++) {
 		if (strcmp(log_levels[i], level) == 0) {
-			(void)log_filter_set(NULL, 0, (uint32_t)source,
-					     (uint32_t)i);
+			(void)tedge_port_log_set_level(
+				(enum tedge_log_level)i);
 			return;
 		}
 	}
-#endif
 }
 
 static int on_change(const char *set, char *reason, size_t reason_len,
 		     void *user_data)
 {
-	ARG_UNUSED(set);
-	ARG_UNUSED(reason);
-	ARG_UNUSED(reason_len);
-	ARG_UNUSED(user_data);
+	TEDGE_UNUSED(set);
+	TEDGE_UNUSED(reason);
+	TEDGE_UNUSED(reason_len);
+	TEDGE_UNUSED(user_data);
 
 	/* Nothing here can be refused: every value was already checked
 	 * against the declaration, and none of them can contradict another. */
 	apply_log_level();
-#if defined(CONFIG_TEDGE_TRANSPORT_C8Y)
+#if defined(TEDGE_TRANSPORT_C8Y)
 	/* Tell Cumulocity the new window rather than waiting for the next
 	 * connect.
 	 *
@@ -194,23 +194,23 @@ static int on_change(const char *set, char *reason, size_t reason_len,
 void tedge_self_params_declare(void)
 {
 	int rc = tedge_declare_parameters(SELF_SET, self_params,
-					  ARRAY_SIZE(self_params), on_change,
+					  TEDGE_ARRAY_SIZE(self_params), on_change,
 					  NULL);
 
 	if (rc != 0) {
-		LOG_WRN("the client's own parameters were not declared (%d)",
+		TEDGE_LOG_WRN("the client's own parameters were not declared (%d)",
 			rc);
 		return;
 	}
 	/* A level stored before the last reboot has to be put back now. */
 	apply_log_level();
-#if defined(CONFIG_TEDGE_REMOTE_ACCESS)
+#if defined(TEDGE_REMOTE_ACCESS)
 	/* Read where it is used (tedge_self_remote_access_allowed()), so
 	 * there is nothing to apply on a change. */
-	rc = tedge_declare_parameters(RA_SET, ra_params, ARRAY_SIZE(ra_params),
+	rc = tedge_declare_parameters(RA_SET, ra_params, TEDGE_ARRAY_SIZE(ra_params),
 				      NULL, NULL);
 	if (rc != 0) {
-		LOG_WRN("the '%s' parameters were not declared (%d)", RA_SET,
+		TEDGE_LOG_WRN("the '%s' parameters were not declared (%d)", RA_SET,
 			rc);
 	}
 #endif

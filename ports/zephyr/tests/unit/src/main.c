@@ -532,9 +532,11 @@ int tedge_c8y_publish_telemetry(enum tedge_msg_kind kind, const char *type,
 
 void tedge_telemetry_wake(void) { }
 
-bool tedge_time_is_valid(void)
+int tedge_port_time_now(time_t *secs)
 {
-	return true; /* the tests do not depend on a real clock */
+	/* The tests do not depend on a real clock, only on there being one. */
+	*secs = 1789900000; /* 2026-09-20 */
+	return 0;
 }
 
 void tedge_json_escape(const char *in, char *out, size_t len)

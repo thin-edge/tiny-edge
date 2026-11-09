@@ -95,7 +95,7 @@ static int days_remaining(void)
 {
 	struct timespec now;
 
-	if (cert_expires == 0 || !tedge_time_is_valid()) {
+	if (cert_expires == 0 || !tedge_port_time_is_valid()) {
 		return -1;
 	}
 	(void)sys_clock_gettime(SYS_CLOCK_REALTIME, &now);
@@ -231,7 +231,7 @@ void tedge_cert_renew_tick(void)
 {
 	int days;
 
-	if (!tedge_time_is_valid()) {
+	if (!tedge_port_time_is_valid()) {
 		return; /* the expiry means nothing without a clock */
 	}
 	if (next_check_at != 0 && k_uptime_get() < next_check_at) {
