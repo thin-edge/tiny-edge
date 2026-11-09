@@ -9,7 +9,6 @@
 
 #include "tedge_internal.h"
 
-#include <zephyr/net/dns_resolve.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,17 +33,10 @@ bool tedge_ra_is_mdns_name(const char *host)
 
 bool tedge_ra_resolve_retryable(int status)
 {
-	switch (status) {
-	case DNS_EAI_CANCELED: /* nobody answered in time */
-	case DNS_EAI_AGAIN:
-	case DNS_EAI_SYSTEM:   /* no socket or server to send on, yet */
-	case DNS_EAI_MEMORY:
-		return true;
-	default:
-		/* An authoritative "no such name" (DNS_EAI_NONAME, _NODATA,
-		 * _FAIL) gives the same answer the next time. */
-		return false;
-	}
+	/* Nobody answered in time, or there was no server or memory to ask
+	 * with yet. An authoritative "no such name" (-ENOENT) gives the same
+	 * answer the next time. */
+	return status == -ETIMEDOUT || status == -EAGAIN;
 }
 
 enum tedge_ra_verdict tedge_ra_policy_decide(enum tedge_ra_policy policy,

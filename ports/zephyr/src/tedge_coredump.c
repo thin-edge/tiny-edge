@@ -14,6 +14,7 @@
  */
 
 #include "tedge_internal.h"
+#include <tedge/port/device.h>
 
 #include <zephyr/debug/coredump.h>
 #include <zephyr/kernel.h>
@@ -96,7 +97,7 @@ static int dump_reader(const struct tedge_log_request *req,
 	return write(ctx, END_LINE, strlen(END_LINE));
 }
 
-void tedge_coredump_init(void)
+void tedge_port_coredump_init(void)
 {
 	size_t size = 0;
 	int stored = coredump_query(COREDUMP_QUERY_HAS_STORED_DUMP, NULL);
@@ -112,7 +113,7 @@ void tedge_coredump_init(void)
 	(void)tedge_register_log_type("coredump", dump_reader, NULL);
 }
 
-void tedge_coredump_taken(void)
+void tedge_port_coredump_taken(void)
 {
 	if (!have_dump) {
 		return;

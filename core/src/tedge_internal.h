@@ -13,11 +13,16 @@
 #define TEDGE_INTERNAL_H_
 
 #include <tedge/tedge.h>
+/* Every core file includes this header first, so none of them can test a
+ * TEDGE_* option before it is defined and quietly build without the
+ * feature. */
+#include <tedge/port/config.h>
+#include <tedge/port/time.h>
 
-#include <zephyr/kernel.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <time.h>
 
 /** Resolved identity: the application's values with the defaults applied. */
 struct tedge_id {
@@ -49,11 +54,11 @@ const struct tedge_id *tedge_identity(void);
 const struct tedge_hooks *tedge_hook_table(void);
 void tedge_set_state(enum tedge_state state);
 
-/** The module's bounded heap (CONFIG_TEDGE_HEAP_SIZE). */
+/** The module's bounded heap (TEDGE_HEAP_SIZE). */
 void *tedge_alloc(size_t size);
 void tedge_free(void *p);
 
-/** Cumulocity tenant host: settings override, else CONFIG_TEDGE_C8Y_URL. */
+/** Cumulocity tenant host: settings override, else TEDGE_C8Y_URL. */
 const char *tedge_c8y_host(void);
 int tedge_c8y_host_set(const char *host);
 
@@ -65,17 +70,26 @@ void tedge_twin_republish(void);
 
 /**
  * Reset the device: the application's hook if it has one, else the
- * platform's full-system reset. Does not return.
+ * platform's full-system reset (tedge_device.c). Does not return.
  */
-FUNC_NORETURN void tedge_platform_reset(void);
+_Noreturn void tedge_device_reset(void);
 
-/** "<CONFIG_TEDGE_DEVICE_ID_PREFIX>-<MAC>" into @p buf. */
-int tedge_platform_default_id(char *buf, size_t len);
+/** "<TEDGE_DEVICE_ID_PREFIX>-<MAC>" into @p buf (tedge_device.c). */
+int tedge_default_device_id(char *buf, size_t len);
 
-/** True once the realtime clock is plausible (set by SNTP or the app). */
-bool tedge_time_is_valid(void);
-/** Set the clock with SNTP unless it is already valid. */
-int tedge_time_sync(void);
+/* --- Encodings (tedge_codec.c) ------------------------------------------ */
+
+/** SHA-1 of @p len bytes into @p digest. For the WebSocket handshake, never
+ *  for anything secret. */
+void tedge_sha1(const void *data, size_t len, uint8_t digest[20]);
+
+/** Base64 of @p len bytes into @p out, NUL-terminated.
+ *  @return The length written, or -ENOSPC. */
+int tedge_base64_encode(const uint8_t *in, size_t len, char *out, size_t cap);
+
+/** Seconds since the epoch for @p tm, read as UTC (the standard library has
+ *  no timegm()). Only the date and time fields are read. */
+time_t tedge_timegm(const struct tm *tm);
 
 /* --- SmartREST helpers (tedge_smartrest.c) ------------------------------- */
 
@@ -201,7 +215,8 @@ size_t tedge_log_types_line(char *out, size_t len);
 /** Registers the client's own log; called once at startup. */
 void tedge_log_upload_init(void);
 
-/** The client's own log, kept in RAM (tedge_log_ring.c). */
+/** The client's own log, kept in RAM (tedge_log_ring.c). The port feeds it
+ *  with tedge_log_ring_write(). */
 void tedge_log_ring_write(const uint8_t *data, size_t len);
 size_t tedge_log_ring_read(size_t offset, uint8_t *out, size_t len);
 size_t tedge_log_ring_size(void);
@@ -232,9 +247,14 @@ int tedge_params_apply(const char *set_name, const char *json, char *reason,
  */
 int tedge_params_schema(const char *set_name, char *out, size_t len);
 
+/** How many parameter sets are declared, and the name (and parameter
+ *  count) of each, for the port's console commands. */
+size_t tedge_params_set_count(void);
+const char *tedge_params_set_name(size_t index, size_t *count);
+
 /* The client's own tunables (tedge_self_params.c). Each is read where its
  * value is used, so a change needs nothing to be notified. Without
- * CONFIG_TEDGE_PARAMETERS_SELF the Kconfig value is used directly. */
+ * TEDGE_PARAMETERS_SELF the build's value is used directly. */
 void tedge_self_params_declare(void);
 int tedge_self_health_interval_s(void);
 int tedge_self_required_interval_min(void);
@@ -255,19 +275,12 @@ bool tedge_self_remote_access_allowed(void);
  */
 bool tedge_operation_from_json(const char *json, char *line, size_t len);
 
-/* --- Crash dumps (tedge_coredump.c) -------------------------------------- */
-
-/** Offers a stored dump as a log type; called once at startup. */
-void tedge_coredump_init(void);
-/** The dump reached the cloud and may be erased. */
-void tedge_coredump_taken(void);
-
 /* --- Shell command (tedge_shell_cmd.c) ----------------------------------- */
 
-#if defined(CONFIG_TEDGE_SHELL_COMMAND)
+#if defined(TEDGE_SHELL_COMMAND)
 struct tedge_shell_event {
 	int rc; /* 0 when the command ran and returned success */
-	char output[CONFIG_TEDGE_SHELL_COMMAND_OUTPUT_BYTES];
+	char output[TEDGE_SHELL_COMMAND_OUTPUT_BYTES];
 };
 
 /** Start the command a "511,…" line asks for. */
@@ -418,8 +431,8 @@ bool tedge_ra_in_allow_list(const char *list, const char *host, uint16_t port);
  * without the trailing dot. */
 bool tedge_ra_is_mdns_name(const char *host);
 
-/** True when a lookup that ended with @p status (a DNS_EAI_* code; map an
- * errno from the resolver to DNS_EAI_SYSTEM first, as getaddrinfo() does)
+/** True when a lookup that ended with @p status (a negative errno from
+ * tedge_port_resolve(), or the client's own mDNS query)
  * is worth another attempt. */
 bool tedge_ra_resolve_retryable(int status);
 
@@ -540,10 +553,5 @@ const char *tedge_auth_password(void);
  * swap, which may be older code. */
 #define TEDGE_KEY_FIRMWARE_SIZE  TEDGE_SETTINGS_ROOT "/firmware_size"
 #define TEDGE_KEY_FIRMWARE_OP    TEDGE_SETTINGS_ROOT "/firmware_op"
-
-/* --- TLS credential tags ------------------------------------------------- */
-
-#define TEDGE_TAG_SERVER_CA (CONFIG_TEDGE_TLS_TAG_BASE + 0)
-#define TEDGE_TAG_DEVICE    (CONFIG_TEDGE_TLS_TAG_BASE + 1)
 
 #endif /* TEDGE_INTERNAL_H_ */

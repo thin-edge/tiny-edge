@@ -22,11 +22,17 @@ target_sources(app PRIVATE
   ../../../../core/src/tedge_telemetry.c
   ../../../../core/src/tedge_json.c
   ../../../../core/src/tedge_shell_allow_list.c
-  ../../src/tedge_log_ring.c
+  ../../../../core/src/tedge_log_ring.c
+  ../../src/tedge_port.c
+  ../../src/tedge_port_os.c
   ../../../../core/src/tedge_op_json.c
   ../../../../core/src/tedge_parameters.c
   ../../../../core/src/tedge_otp.c
   ../../../../core/src/tedge_fw_decision.c
+  ../../../../core/src/tedge_http.c
+  ../../../../core/src/tedge_ws.c
+  ../../../../core/src/tedge_mqtt.c
+  ../../../../core/src/tedge_codec.c
 )
 
 # The telemetry API is compiled in for the tests, with a small buffer so the
@@ -35,6 +41,9 @@ target_compile_definitions(app PRIVATE
   # As the module itself: gmtime_r() is POSIX (see ports/zephyr/CMakeLists.txt).
   _POSIX_C_SOURCE=200809L
   CONFIG_TEDGE_TELEMETRY=1
+  # The port's kernel services need the client's thread priority and heap.
+  CONFIG_TEDGE_THREAD_PRIORITY=7
+  CONFIG_TEDGE_HEAP_SIZE=1024
   CONFIG_TEDGE_TELEMETRY_BUFFER_BYTES=512
   # The module's log level comes from its Kconfig, which is not part of a
   # test build.
@@ -49,3 +58,9 @@ target_compile_definitions(app PRIVATE
   CONFIG_TEDGE_PARAMETERS_SCHEMA=1
 )
 target_include_directories(app PRIVATE ../../../../include ../../include ../../../../core/src)
+
+# The core reads the CONFIG_TEDGE_* values above as TEDGE_*, through the
+# header the module generates (see ports/zephyr/cmake/tedge_config.cmake).
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/tedge_config.cmake)
+tedge_generate_config(${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

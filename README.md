@@ -26,7 +26,7 @@ Modbus TCP, OPC-UA, and SNMP servers with tiny-edge built in.
 tiny-edge/
 ├── include/tedge/
 │   ├── tedge.h          the public API, the same on every RTOS
-│   └── port/            the port interface (planned): what each port implements
+│   └── port/            the port interface: what each port implements
 ├── core/                the client: Cumulocity protocol, operations, parameters,
 │                        telemetry buffering, and the decision logic
 ├── ports/
@@ -42,8 +42,10 @@ tiny-edge/
 
 ## How the code is split
 
-**`core/`** holds everything that does not depend on the RTOS. It uses C99,
-the client's own headers, and the port interface. It has no RTOS headers and
+**`core/`** holds everything that does not depend on the RTOS. It uses C,
+the client's own headers, and the port interface, and speaks MQTT, HTTP,
+and WebSocket itself. For parsing certificates and ASN.1 it uses mbedTLS as
+a plain C library; anything that needs the device's key is the port's. It has no RTOS headers and
 no Kconfig symbols. Features are switched with `TEDGE_*` macros from a
 configuration header, so the core builds the same way everywhere.
 
@@ -64,11 +66,28 @@ The port interface sits at the transport level: a port provides a TLS byte
 stream, and the core speaks MQTT, HTTP, and WebSocket over it. One protocol
 implementation then serves every port, and a new port needs no protocol code.
 
+### The port interface
+
+`include/tedge/port/` lists what a port implements, one header per concern.
+Functions a port implements are prefixed `tedge_port_`.
+
+| Header | What the port provides |
+|---|---|
+| `config.h` | `<tedge_config.h>`: the build configuration as `TEDGE_*` macros. Zephyr generates it from Kconfig. |
+| `log.h` | `<tedge_port/log.h>`: the `TEDGE_LOG_*` macros on the RTOS's logging, and the run-time log level |
+| `os.h` | `<tedge_port/os.h>`: the kernel object types. Mutexes, spinlocks, threads on static stacks, message queues, event flags, semaphores, delayed work, atomics, uptime, random numbers, and the client's own heap |
+| `time.h` | The wall clock: whether it is set, setting it from the network, reading it |
+| `device.h` | The MAC address, the reset and its cause, and crash dumps |
+| `kv.h` | Persistent key-value storage: the tenant, credentials, parameter values, the state of an update |
+| `net.h` | Whether the network is up, name lookup, TCP and TLS streams, UDP, and the TLS credentials |
+| `crypto.h` | The device key (generated once, never handed out), a certificate request signed with it, and random bytes |
+| `firmware.h` | The update slot: write a new image, boot it on trial, confirm it, and the running image's version |
+
 The boundary is checked in CI. `scripts/check-portability.py` fails when
-code in `core/` or `include/tedge/tedge.h` uses an RTOS API, or when one
-port refers to another. The core came from a Zephyr-only client, so some of
-its files still call Zephyr directly. The script lists them, and the list
-can only get shorter.
+code in `core/`, `include/tedge/tedge.h`, or `include/tedge/port/` uses an
+RTOS API, or when one port refers to another. `tests/host-compile/` compiles every
+core file with the host's compiler and C library against a port that has
+only types, which catches what the script's patterns miss.
 
 ## The public API
 

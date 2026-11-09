@@ -230,16 +230,13 @@ ZTEST(tedge_remote_access, test_mdns_name)
 ZTEST(tedge_remote_access, test_resolve_retryable)
 {
 	/* Nobody answered, or the resolver was not ready: ask again. */
-	zassert_true(tedge_ra_resolve_retryable(DNS_EAI_CANCELED));
-	zassert_true(tedge_ra_resolve_retryable(DNS_EAI_AGAIN));
-	zassert_true(tedge_ra_resolve_retryable(DNS_EAI_SYSTEM));
-	zassert_true(tedge_ra_resolve_retryable(DNS_EAI_MEMORY));
+	zassert_true(tedge_ra_resolve_retryable(-ETIMEDOUT));
+	zassert_true(tedge_ra_resolve_retryable(-EAGAIN));
 
-	/* An authoritative answer gives the same answer next time. */
-	zassert_false(tedge_ra_resolve_retryable(DNS_EAI_NONAME));
-	zassert_false(tedge_ra_resolve_retryable(DNS_EAI_NODATA));
-	zassert_false(tedge_ra_resolve_retryable(DNS_EAI_FAIL));
-	zassert_false(tedge_ra_resolve_retryable(DNS_EAI_FAMILY));
+	/* An authoritative answer gives the same answer next time, and so
+	 * does anything the port does not call transient. */
+	zassert_false(tedge_ra_resolve_retryable(-ENOENT));
+	zassert_false(tedge_ra_resolve_retryable(-EINVAL));
 }
 
 ZTEST(tedge_remote_access, test_policy_decide)
@@ -532,9 +529,11 @@ int tedge_c8y_publish_telemetry(enum tedge_msg_kind kind, const char *type,
 
 void tedge_telemetry_wake(void) { }
 
-bool tedge_time_is_valid(void)
+int tedge_port_time_now(time_t *secs)
 {
-	return true; /* the tests do not depend on a real clock */
+	/* The tests do not depend on a real clock, only on there being one. */
+	*secs = 1789900000; /* 2026-09-20 */
+	return 0;
 }
 
 void tedge_json_escape(const char *in, char *out, size_t len)
@@ -1288,7 +1287,7 @@ ZTEST_SUITE(tedge_json_value, NULL, NULL, NULL, NULL, NULL);
 /* agree — the values, the settings keys and the twin — actually do.         */
 /* ------------------------------------------------------------------------ */
 
-#include <zephyr/settings/settings.h>
+#include <tedge/port/kv.h>
 #include <zephyr/types.h>
 #include <stdlib.h>
 
@@ -1316,8 +1315,9 @@ int tedge_publish_twin(const char *fragment, const char *json)
 	return 0;
 }
 
-/* Settings, stubbed: a flat key/value store, so a test can see exactly
- * which keys were written and prove that an unchanged value wrote none. */
+/* The port's key-value store, faked: a flat table, so a test can see
+ * exactly which keys were written and prove that an unchanged value wrote
+ * none. */
 #define STORE_SLOTS 16
 static struct {
 	char key[64];
@@ -1333,7 +1333,7 @@ static void store_clear(void)
 	store_writes = 0;
 }
 
-int settings_save_one(const char *name, const void *value, size_t val_len)
+int tedge_port_kv_set(const char *name, const void *value, size_t val_len)
 {
 	int free_slot = -1;
 
@@ -1361,7 +1361,7 @@ int settings_save_one(const char *name, const void *value, size_t val_len)
 	return 0;
 }
 
-int settings_delete(const char *name)
+int tedge_port_kv_delete(const char *name)
 {
 	for (int i = 0; i < STORE_SLOTS; i++) {
 		if (store_slot[i].used && strcmp(store_slot[i].key, name) == 0) {
@@ -1372,37 +1372,34 @@ int settings_delete(const char *name)
 	return 0;
 }
 
-static ssize_t store_read(void *cb_arg, void *data, size_t len)
+int tedge_port_kv_get(const char *key, void *buf, size_t cap)
 {
-	size_t i = (size_t)(uintptr_t)cb_arg;
-	size_t n = MIN(len, store_slot[i].len);
-
-	memcpy(data, store_slot[i].value, n);
-	return (ssize_t)n;
+	for (size_t i = 0; i < STORE_SLOTS; i++) {
+		if (!store_slot[i].used || strcmp(store_slot[i].key, key) != 0) {
+			continue;
+		}
+		if (store_slot[i].len > cap) {
+			return -ENOSPC;
+		}
+		memcpy(buf, store_slot[i].value, store_slot[i].len);
+		return (int)store_slot[i].len;
+	}
+	return -ENOENT;
 }
 
-int settings_load_subtree_direct(const char *subtree,
-				 settings_load_direct_cb cb, void *param)
+int tedge_port_kv_foreach(const char *prefix,
+			  void (*cb)(const char *subkey, void *ctx), void *ctx)
 {
-	size_t prefix = strlen(subtree);
+	size_t len = strlen(prefix);
 
 	for (size_t i = 0; i < STORE_SLOTS; i++) {
 		const char *key = store_slot[i].key;
-		const char *relative;
 
-		if (!store_slot[i].used ||
-		    strncmp(key, subtree, prefix) != 0) {
-			continue;
+		/* "tedge/paramX" is not under "tedge/param". */
+		if (store_slot[i].used && strncmp(key, prefix, len) == 0 &&
+		    key[len] == '/') {
+			cb(key + len + 1, ctx);
 		}
-		if (key[prefix] == '\0') {
-			relative = ""; /* the subtree is the value itself */
-		} else if (key[prefix] == '/') {
-			relative = key + prefix + 1;
-		} else {
-			continue; /* "tedge/paramX" is not under "tedge/param" */
-		}
-		(void)cb(relative, store_slot[i].len, store_read,
-			 (void *)(uintptr_t)i, param);
 	}
 	return 0;
 }
@@ -1876,3 +1873,657 @@ ZTEST(tedge_fw, test_a_reverted_image_is_reported)
 }
 
 ZTEST_SUITE(tedge_fw, NULL, NULL, NULL, NULL, NULL);
+
+/* ------------------------------------------------------------------------ */
+/* The HTTP client (tedge_http.c)                                            */
+/* ------------------------------------------------------------------------ */
+
+#include "tedge_http.h"
+#include <tedge/port/net.h>
+
+static char http_body[2048];
+static size_t http_body_len;
+static int http_body_status;
+static char http_location[1200];
+static bool http_location_done;
+static int http_body_refuse;
+
+static void http_on_header(const char *name, const char *piece, size_t len,
+			   size_t offset, bool last, void *ctx)
+{
+	ARG_UNUSED(ctx);
+	if (strcmp(name, "location") != 0) {
+		return;
+	}
+	if (offset + len < sizeof(http_location)) {
+		memcpy(http_location + offset, piece, len);
+		http_location[offset + len] = '\0';
+	}
+	if (last) {
+		http_location_done = true;
+	}
+}
+
+static int http_on_body(int status, const void *data, size_t len, void *ctx)
+{
+	ARG_UNUSED(ctx);
+	http_body_status = status;
+	if (http_body_refuse != 0) {
+		return http_body_refuse;
+	}
+	if (http_body_len + len < sizeof(http_body)) {
+		memcpy(http_body + http_body_len, data, len);
+		http_body_len += len;
+		http_body[http_body_len] = '\0';
+	}
+	return 0;
+}
+
+static void http_before(void *fixture)
+{
+	ARG_UNUSED(fixture);
+	http_body[0] = '\0';
+	http_body_len = 0;
+	http_body_status = 0;
+	http_location[0] = '\0';
+	http_location_done = false;
+	http_body_refuse = 0;
+}
+
+/* Feeds @p text in pieces of @p step bytes, as the network might. */
+static int http_feed(struct tedge_http_parser *p, const char *text, size_t step)
+{
+	size_t len = strlen(text);
+
+	for (size_t off = 0; off < len; off += step) {
+		int rc = tedge_http_parse(p, (const uint8_t *)text + off,
+					  MIN(step, len - off));
+
+		if (rc != 0) {
+			return rc;
+		}
+	}
+	return 0;
+}
+
+ZTEST(tedge_http, test_content_length_body)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, http_on_header, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n"
+				 "\r\nhello", 1000));
+	zassert_true(p.done);
+	zassert_equal(p.status, 200);
+	zassert_equal(p.content_length, 5);
+	zassert_str_equal(http_body, "hello");
+}
+
+ZTEST(tedge_http, test_chunked_body_a_byte_at_a_time)
+{
+	struct tedge_http_parser p;
+
+	/* As Cumulocity serves a binary: chunked, with an extension and a
+	 * trailer, and arriving in the smallest pieces possible. */
+	tedge_http_parser_init(&p, http_on_header, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.1 200 OK\r\n"
+				 "Transfer-Encoding: Chunked\r\n\r\n"
+				 "5;name=value\r\nhello\r\n"
+				 "6\r\n world\r\n"
+				 "0\r\nX-Trailer: yes\r\n\r\n", 1));
+	zassert_true(p.done);
+	zassert_str_equal(http_body, "hello world");
+}
+
+ZTEST(tedge_http, test_chunk_sizes_in_hex)
+{
+	struct tedge_http_parser p;
+	static char response[512];
+	char body[0x1a + 1];
+
+	memset(body, 'x', sizeof(body) - 1);
+	body[sizeof(body) - 1] = '\0';
+	snprintf(response, sizeof(response),
+		 "HTTP/1.1 206 Partial Content\r\ntransfer-encoding: chunked\r\n"
+		 "\r\n1A\r\n%s\r\n0\r\n\r\n", body);
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_ok(http_feed(&p, response, 7));
+	zassert_true(p.done);
+	zassert_equal(http_body_len, 0x1a);
+	zassert_equal(http_body_status, 206);
+}
+
+ZTEST(tedge_http, test_long_location_in_pieces)
+{
+	struct tedge_http_parser p;
+	static char response[1400];
+	static char url[1001];
+
+	/* A release asset's redirect: a Location of a kilobyte, longer than
+	 * any buffer the parser has, split across reads. */
+	memset(url, 'a', sizeof(url) - 1);
+	memcpy(url, "https://", 8);
+	url[sizeof(url) - 1] = '\0';
+	snprintf(response, sizeof(response),
+		 "HTTP/1.1 302 Found\r\nLocation: %s\r\nContent-Length: 0\r\n\r\n",
+		 url);
+	tedge_http_parser_init(&p, http_on_header, http_on_body, NULL);
+	zassert_ok(http_feed(&p, response, 100));
+	zassert_true(p.done);
+	zassert_equal(p.status, 302);
+	zassert_true(http_location_done);
+	zassert_str_equal(http_location, url);
+}
+
+ZTEST(tedge_http, test_body_to_close)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.0 200 OK\r\n\r\nuntil the end", 3));
+	zassert_false(p.done, "no length: the body runs to the close");
+	zassert_ok(tedge_http_parse_eof(&p));
+	zassert_str_equal(http_body, "until the end");
+}
+
+ZTEST(tedge_http, test_cut_short)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n"
+				 "short", 100));
+	zassert_equal(tedge_http_parse_eof(&p), -ECONNRESET);
+}
+
+ZTEST(tedge_http, test_no_body_and_interim)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_ok(http_feed(&p, "HTTP/1.1 100 Continue\r\n\r\n"
+				 "HTTP/1.1 204 No Content\r\n\r\n", 5));
+	zassert_true(p.done);
+	zassert_equal(p.status, 204);
+	zassert_equal(http_body_len, 0);
+}
+
+ZTEST(tedge_http, test_malformed)
+{
+	struct tedge_http_parser p;
+
+	tedge_http_parser_init(&p, NULL, NULL, NULL);
+	zassert_equal(http_feed(&p, "SSH-2.0-OpenSSH\r\n", 100), -EBADMSG);
+
+	tedge_http_parser_init(&p, NULL, NULL, NULL);
+	zassert_equal(http_feed(&p, "HTTP/1.1 200 OK\r\nbroken header\r\n",
+				100), -EBADMSG);
+
+	tedge_http_parser_init(&p, NULL, NULL, NULL);
+	zassert_equal(http_feed(&p, "HTTP/1.1 200 OK\r\nTransfer-Encoding: "
+				    "chunked\r\n\r\nzz\r\n", 100), -EBADMSG);
+}
+
+ZTEST(tedge_http, test_body_refused)
+{
+	struct tedge_http_parser p;
+
+	http_body_refuse = -ENOSPC;
+	tedge_http_parser_init(&p, NULL, http_on_body, NULL);
+	zassert_equal(http_feed(&p, "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n"
+				    "\r\nhello", 100), -ENOSPC);
+}
+
+/* A connection, faked at the port interface: what the client sends is
+ * kept, and the response is handed back a few bytes at a time. */
+static char net_sent[1024];
+static size_t net_sent_len;
+static const char *net_reply;
+static size_t net_reply_len;
+static size_t net_reply_off;
+
+int tedge_port_send(int conn, const void *buf, size_t len)
+{
+	ARG_UNUSED(conn);
+	len = MIN(len, sizeof(net_sent) - 1 - net_sent_len);
+	memcpy(net_sent + net_sent_len, buf, len);
+	net_sent_len += len;
+	net_sent[net_sent_len] = '\0';
+	return (int)len;
+}
+
+int tedge_port_recv(int conn, void *buf, size_t len, uint32_t timeout_ms)
+{
+	size_t left = net_reply_len - net_reply_off;
+	size_t n = MIN(MIN(len, left), 7);
+
+	ARG_UNUSED(conn);
+	ARG_UNUSED(timeout_ms);
+	memcpy(buf, net_reply + net_reply_off, n);
+	net_reply_off += n;
+	return (int)n; /* 0 once it is all out: the server closed */
+}
+
+int tedge_port_resolve(const char *host, uint8_t addr[4], uint32_t timeout_ms)
+{
+	ARG_UNUSED(host);
+	ARG_UNUSED(timeout_ms);
+	memset(addr, 0, 4);
+	return 0;
+}
+
+int tedge_port_connect(const uint8_t addr[4], uint16_t port,
+		       enum tedge_port_security security, const char *hostname,
+		       uint32_t timeout_ms)
+{
+	ARG_UNUSED(addr);
+	ARG_UNUSED(port);
+	ARG_UNUSED(security);
+	ARG_UNUSED(hostname);
+	ARG_UNUSED(timeout_ms);
+	return 3;
+}
+
+void tedge_port_close(int conn)
+{
+	ARG_UNUSED(conn);
+}
+
+ZTEST(tedge_http, test_exchange)
+{
+	static const char *const headers[] = { "Accept: application/json\r\n",
+					       NULL };
+	uint8_t buf[64];
+	int status = 0;
+	struct tedge_http_request req = {
+		.method = "POST",
+		.host = "example.cumulocity.com",
+		.path = "/event/events",
+		.headers = headers,
+		.content_type = "application/json",
+		.payload = "{\"a\":1}",
+		.body_len = 7,
+		.on_body = http_on_body,
+		.buf = buf,
+		.buf_len = sizeof(buf),
+		.timeout_ms = 1000,
+	};
+
+	net_sent_len = 0;
+	net_reply_off = 0;
+	net_reply = "HTTP/1.1 201 Created\r\nContent-Length: 8\r\n\r\n{\"id\":1}";
+	net_reply_len = strlen(net_reply);
+	zassert_ok(tedge_http_exchange(3, &req, &status));
+	zassert_equal(status, 201);
+	zassert_str_equal(http_body, "{\"id\":1}");
+	zassert_str_equal(net_sent,
+			  "POST /event/events HTTP/1.1\r\n"
+			  "Host: example.cumulocity.com\r\n"
+			  "Accept: application/json\r\n"
+			  "Content-Type: application/json\r\n"
+			  "Content-Length: 7\r\n"
+			  "Connection: close\r\n\r\n"
+			  "{\"a\":1}");
+}
+
+ZTEST(tedge_http, test_exchange_cut_short)
+{
+	uint8_t buf[64];
+	int status = 0;
+	struct tedge_http_request req = {
+		.method = "GET", .host = "h", .path = "/",
+		.on_body = http_on_body, .buf = buf, .buf_len = sizeof(buf),
+		.timeout_ms = 1000,
+	};
+
+	net_sent_len = 0;
+	net_reply_off = 0;
+	net_reply = "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\npart";
+	net_reply_len = strlen(net_reply);
+	zassert_equal(tedge_http_exchange(3, &req, &status), -ECONNRESET);
+}
+
+ZTEST_SUITE(tedge_http, NULL, NULL, http_before, NULL, NULL);
+
+/* ------------------------------------------------------------------------ */
+/* The WebSocket client (tedge_ws.c)                                         */
+/* ------------------------------------------------------------------------ */
+
+#include "tedge_ws.h"
+
+ZTEST(tedge_ws, test_accept_key)
+{
+	/* RFC 6455 section 1.3's example. */
+	static const char keyed[] = "dGhlIHNhbXBsZSBub25jZQ=="
+				    "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+	uint8_t digest[20];
+	char accept[32];
+
+	tedge_sha1(keyed, strlen(keyed), digest);
+	zassert_equal(tedge_base64_encode(digest, sizeof(digest), accept,
+					  sizeof(accept)), 28);
+	zassert_str_equal(accept, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
+}
+
+ZTEST(tedge_ws, test_sha1_and_base64_edges)
+{
+	/* Two blocks of padding, and base64 with one and two '='. */
+	static const char abc[] = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmn"
+				  "lmnomnopnopq";
+	static const uint8_t want[20] = {
+		0x84, 0x98, 0x3e, 0x44, 0x1c, 0x3b, 0xd2, 0x6e, 0xba, 0xae,
+		0x4a, 0xa1, 0xf9, 0x51, 0x29, 0xe5, 0xe5, 0x46, 0x70, 0xf1,
+	};
+	uint8_t digest[20];
+	char out[8];
+
+	tedge_sha1(abc, strlen(abc), digest);
+	zassert_mem_equal(digest, want, sizeof(want));
+	zassert_equal(tedge_base64_encode((const uint8_t *)"a", 1, out,
+					  sizeof(out)), 4);
+	zassert_str_equal(out, "YQ==");
+	zassert_equal(tedge_base64_encode((const uint8_t *)"ab", 2, out,
+					  sizeof(out)), 4);
+	zassert_str_equal(out, "YWI=");
+	zassert_equal(tedge_base64_encode((const uint8_t *)"abcdef", 6, out, 8),
+		      -ENOSPC);
+}
+
+/* A session already open, reading what the fake connection hands over. */
+static void ws_open(struct tedge_ws *ws, uint8_t *rx, size_t cap,
+		    const char *reply, size_t reply_len)
+{
+	static char script[256];
+
+	memset(ws, 0, sizeof(*ws));
+	ws->conn = 3;
+	ws->rx = rx;
+	ws->rx_cap = cap;
+	memcpy(script, reply, reply_len);
+	net_reply = script;
+	net_reply_len = reply_len;
+	net_reply_off = 0;
+	net_sent_len = 0;
+}
+
+ZTEST(tedge_ws, test_receive_frames)
+{
+	/* "hel" unmasked, a ping with "p" between, "lo" masked with a key of
+	 * 1,2,3,4, then the server's close (1000). */
+	static const char reply[] = "\x82\x03hel"
+				    "\x89\x01p"
+				    "\x82\x82\x01\x02\x03\x04" "\x6d\x6d"
+				    "\x88\x02\x03\xe8";
+	struct tedge_ws ws;
+	uint8_t rx[16];
+	uint8_t buf[16];
+	size_t got = 0;
+	int n;
+
+	ws_open(&ws, rx, sizeof(rx), reply, sizeof(reply) - 1);
+	while ((n = tedge_ws_recv(&ws, buf + got, sizeof(buf) - got, 0)) > 0) {
+		got += n;
+	}
+	zassert_equal(n, -ENOTCONN, "the close is reported");
+	zassert_equal(got, 5);
+	zassert_mem_equal(buf, "hello", 5);
+
+	/* The ping was answered with a masked pong of the same payload, and
+	 * the close was echoed. */
+	zassert_true(net_sent_len >= 7 + 8);
+	zassert_equal((uint8_t)net_sent[0], 0x8A, "FIN + pong");
+	zassert_equal((uint8_t)net_sent[1], 0x81, "masked, 1 byte");
+	zassert_equal((uint8_t)net_sent[6] ^ (uint8_t)net_sent[2], 'p');
+	zassert_equal((uint8_t)net_sent[7], 0x88, "FIN + close");
+}
+
+ZTEST(tedge_ws, test_send_masks_and_sizes)
+{
+	static uint8_t big[300];
+	struct tedge_ws ws;
+	uint8_t rx[16];
+
+	ws_open(&ws, rx, sizeof(rx), "", 0);
+	memset(big, 'x', sizeof(big));
+	zassert_ok(tedge_ws_send(&ws, big, sizeof(big)));
+	zassert_equal(net_sent_len, 2 + 2 + 4 + sizeof(big));
+	zassert_equal((uint8_t)net_sent[0], 0x82, "FIN + binary");
+	zassert_equal((uint8_t)net_sent[1], 0x80 | 126, "masked, 16-bit length");
+	zassert_equal(((uint8_t)net_sent[2] << 8) | (uint8_t)net_sent[3],
+		      sizeof(big));
+	for (size_t i = 0; i < sizeof(big); i++) {
+		zassert_equal((uint8_t)net_sent[8 + i] ^
+				      (uint8_t)net_sent[4 + (i & 3)],
+			      'x');
+	}
+}
+
+ZTEST(tedge_ws, test_control_frame_too_long)
+{
+	static const char reply[] = "\x89\x7e\x00\x80";
+	struct tedge_ws ws;
+	uint8_t rx[16];
+	uint8_t buf[16];
+
+	ws_open(&ws, rx, sizeof(rx), reply, sizeof(reply) - 1);
+	zassert_equal(tedge_ws_recv(&ws, buf, sizeof(buf), 0), -EPROTO);
+}
+
+ZTEST_SUITE(tedge_ws, NULL, NULL, NULL, NULL, NULL);
+
+/* ------------------------------------------------------------------------ */
+/* The MQTT client (tedge_mqtt.c)                                            */
+/* ------------------------------------------------------------------------ */
+
+#include "tedge_mqtt.h"
+
+static char mqtt_topic[64];
+static char mqtt_payload[128];
+static size_t mqtt_len;
+static bool mqtt_dropped;
+static int mqtt_messages;
+
+static void mqtt_on_message(const char *topic, const char *payload, size_t len,
+			    bool dropped, void *ctx)
+{
+	ARG_UNUSED(ctx);
+	mqtt_messages++;
+	snprintf(mqtt_topic, sizeof(mqtt_topic), "%s", topic);
+	mqtt_dropped = dropped;
+	mqtt_len = len;
+	if (!dropped) {
+		snprintf(mqtt_payload, sizeof(mqtt_payload), "%s", payload);
+	}
+}
+
+static void mqtt_before(void *fixture)
+{
+	ARG_UNUSED(fixture);
+	mqtt_topic[0] = '\0';
+	mqtt_payload[0] = '\0';
+	mqtt_len = 0;
+	mqtt_dropped = false;
+	mqtt_messages = 0;
+	net_sent_len = 0;
+	net_reply_off = 0;
+	net_reply_len = 0;
+}
+
+ZTEST(tedge_mqtt, test_connect)
+{
+	static const char connack[] = "\x20\x02\x00\x00";
+	const struct tedge_mqtt_connect opts = {
+		.client_id = "dev1", .user = "t1/u", .password = "pw",
+		.keepalive_s = 60,
+	};
+	static const uint8_t want[] = {
+		0x10, 10 + 6 + 6 + 4,
+		0x00, 0x04, 'M', 'Q', 'T', 'T', 0x04, 0xC2, 0x00, 60,
+		0x00, 0x04, 'd', 'e', 'v', '1',
+		0x00, 0x04, 't', '1', '/', 'u',
+		0x00, 0x02, 'p', 'w',
+	};
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+
+	net_reply = connack;
+	net_reply_len = sizeof(connack) - 1;
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_ok(tedge_mqtt_connect(&m, &opts, 1000));
+	zassert_equal(net_sent_len, sizeof(want));
+	zassert_mem_equal(net_sent, want, sizeof(want));
+}
+
+ZTEST(tedge_mqtt, test_connect_refused)
+{
+	static const char connack[] = "\x20\x02\x00\x05"; /* not authorised */
+	const struct tedge_mqtt_connect opts = { .client_id = "dev1" };
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+
+	net_reply = connack;
+	net_reply_len = sizeof(connack) - 1;
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_equal(tedge_mqtt_connect(&m, &opts, 1000), -ECONNREFUSED);
+	zassert_equal(m.connack_code, 5);
+}
+
+ZTEST(tedge_mqtt, test_subscribe)
+{
+	/* A message arrives before the SUBACK, which refuses (0x80). */
+	static const char reply[] = "\x30\x07\x00\x03s/e" "hi"
+				    "\x90\x03\x00\x01\x80";
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+
+	net_reply = reply;
+	net_reply_len = sizeof(reply) - 1;
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_equal(tedge_mqtt_subscribe(&m, "s/ds", 1000), -EACCES);
+	zassert_mem_equal(net_sent, "\x82\x09\x00\x01\x00\x04s/ds\x01", 11);
+	zassert_equal(mqtt_messages, 1);
+	zassert_str_equal(mqtt_topic, "s/e");
+	zassert_str_equal(mqtt_payload, "hi");
+}
+
+ZTEST(tedge_mqtt, test_qos1_message_is_acknowledged)
+{
+	/* QoS 1, packet id 0x1234, fed a byte at a time. */
+	static const uint8_t pkt[] = { 0x32, 0x0B, 0x00, 0x04, 's', '/', 'd',
+				       's', 0x12, 0x34, '5', '1', '0' };
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	for (size_t i = 0; i < sizeof(pkt); i++) {
+		zassert_ok(tedge_mqtt_input(&m, pkt + i, 1));
+	}
+	zassert_equal(mqtt_messages, 1);
+	zassert_str_equal(mqtt_topic, "s/ds");
+	zassert_str_equal(mqtt_payload, "510");
+	zassert_equal(mqtt_len, 3);
+	zassert_equal(net_sent_len, 4);
+	zassert_mem_equal(net_sent, "\x40\x02\x12\x34", 4);
+}
+
+ZTEST(tedge_mqtt, test_too_big_is_dropped_whole)
+{
+	/* A 200-byte payload for a 64-byte buffer, then a small message: the
+	 * first is reported as dropped, and the second still arrives. */
+	static uint8_t pkt[3 + 2 + 3 + 200 + 7];
+	struct tedge_mqtt m;
+	uint8_t rx[64];
+	size_t n = 0;
+
+	pkt[n++] = 0x30;
+	pkt[n++] = 0x80 | ((2 + 3 + 200) & 0x7F);
+	pkt[n++] = (2 + 3 + 200) >> 7;
+	pkt[n++] = 0;
+	pkt[n++] = 3;
+	memcpy(pkt + n, "s/e", 3);
+	n += 3;
+	memset(pkt + n, 'x', 200);
+	n += 200;
+	memcpy(pkt + n, "\x30\x04\x00\x01" "ab", 6);
+	n += 6;
+
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_ok(tedge_mqtt_input(&m, pkt, 100));
+	zassert_ok(tedge_mqtt_input(&m, pkt + 100, n - 100));
+	zassert_equal(mqtt_messages, 2);
+	zassert_str_equal(mqtt_topic, "a");
+	zassert_str_equal(mqtt_payload, "b");
+}
+
+ZTEST(tedge_mqtt, test_dropped_reports_topic)
+{
+	static uint8_t pkt[3 + 2 + 3 + 200];
+	struct tedge_mqtt m;
+	uint8_t rx[32];
+
+	pkt[0] = 0x30;
+	pkt[1] = 0x80 | ((2 + 3 + 200) & 0x7F);
+	pkt[2] = (2 + 3 + 200) >> 7;
+	pkt[3] = 0;
+	pkt[4] = 3;
+	memcpy(pkt + 5, "s/e", 3);
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_ok(tedge_mqtt_input(&m, pkt, sizeof(pkt)));
+	zassert_equal(mqtt_messages, 1);
+	zassert_true(mqtt_dropped);
+	zassert_str_equal(mqtt_topic, "s/e");
+	zassert_equal(mqtt_len, 200);
+}
+
+ZTEST(tedge_mqtt, test_malformed_length)
+{
+	static const uint8_t pkt[] = { 0x30, 0xFF, 0xFF, 0xFF, 0xFF, 0x01 };
+	struct tedge_mqtt m;
+	uint8_t rx[32];
+
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_equal(tedge_mqtt_input(&m, pkt, sizeof(pkt)), -EBADMSG);
+}
+
+ZTEST(tedge_mqtt, test_publish)
+{
+	struct tedge_mqtt m;
+	uint8_t rx[32];
+
+	tedge_mqtt_init(&m, 3, rx, sizeof(rx), mqtt_on_message, NULL);
+	zassert_ok(tedge_mqtt_publish(&m, "s/us", "100,a,b", 7, 1));
+	zassert_equal(net_sent_len, 2 + 2 + 4 + 2 + 7);
+	zassert_mem_equal(net_sent, "\x32\x0F\x00\x04s/us\x00\x01" "100,a,b",
+			  net_sent_len);
+
+	net_sent_len = 0;
+	zassert_ok(tedge_mqtt_publish(&m, "s/ucr", NULL, 0, 0));
+	zassert_mem_equal(net_sent, "\x30\x07\x00\x05s/ucr", 9);
+}
+
+ZTEST_SUITE(tedge_mqtt, NULL, NULL, mqtt_before, NULL, NULL);
+
+/* ------------------------------------------------------------------------ */
+/* Dates (tedge_codec.c)                                                     */
+/* ------------------------------------------------------------------------ */
+
+static time_t utc(int year, int mon, int day, int h, int m, int s)
+{
+	struct tm tm = { .tm_year = year - 1900, .tm_mon = mon - 1,
+			 .tm_mday = day, .tm_hour = h, .tm_min = m, .tm_sec = s };
+
+	return tedge_timegm(&tm);
+}
+
+ZTEST(tedge_codec, test_timegm)
+{
+	zassert_equal(utc(1970, 1, 1, 0, 0, 0), 0);
+	zassert_equal(utc(2000, 2, 29, 12, 0, 0), 951825600);
+	zassert_equal(utc(2000, 3, 1, 0, 0, 0), 951868800);
+	zassert_equal(utc(2026, 9, 20, 10, 15, 0), 1789899300);
+	/* Past 2038, as a certificate's notAfter can be. */
+	zassert_equal(utc(2038, 1, 19, 3, 14, 8), (time_t)2147483648LL);
+	zassert_equal(utc(2100, 3, 1, 0, 0, 0), (time_t)4107542400LL);
+}
+
+ZTEST_SUITE(tedge_codec, NULL, NULL, NULL, NULL, NULL);

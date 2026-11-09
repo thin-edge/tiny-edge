@@ -21,7 +21,7 @@ config TEDGE_KERNEL_SELECTS
 	bool
 	default y
 	select EVENTS
-	# tedge_platform_reset() falls back to sys_reboot().
+	# tedge_port_reset() falls back to sys_reboot().
 	select REBOOT
 
 config TEDGE_EXPERIMENTAL_FEATURES
@@ -114,8 +114,7 @@ config TEDGE_C8Y_SELECTS
 	select NET_TCP
 	select NET_UDP if TEDGE_SNTP
 	select DNS_RESOLVER
-	select MQTT_LIB
-	select MQTT_LIB_TLS
+	# MQTT is the client's own (core/src/tedge_mqtt.c), over TLS sockets.
 	select MBEDTLS
 	select NET_SOCKETS
 	select NET_SOCKETS_SOCKOPT_TLS
@@ -249,7 +248,7 @@ config TEDGE_ENROLL_SELECTS
 	# store (a Kconfig choice, so the module cannot select it); see the
 	# README and the profiles.
 	select SECURE_STORAGE
-	select HTTP_CLIENT
+	select TEDGE_HTTP_CLIENT
 	select MBEDTLS_X509_CSR_WRITE_C
 	select MBEDTLS_PEM_WRITE_C
 	select MBEDTLS_PK_WRITE_C
@@ -546,11 +545,9 @@ config TEDGE_REMOTE_ACCESS
 	  passthrough) to a TCP target: the device itself or another host on
 	  its network, within the target policy below. Each session holds one
 	  TLS connection while it is open. Requires certificate authentication.
-	select TEDGE_HTTP
-	select WEBSOCKET_CLIENT
-	# websocket_connect() hashes Sec-WebSocket-Accept with PSA SHA-1 but
-	# does not select it; without this it fails with -EPROTO.
-	select PSA_WANT_ALG_SHA_1
+	# The tunnel's WebSocket (core/src/tedge_ws.c) opens with an HTTP
+	# upgrade request.
+	select TEDGE_HTTP_CLIENT
 
 if TEDGE_REMOTE_ACCESS
 
@@ -744,12 +741,18 @@ endmenu
 # features (firmware update, log upload, configuration management). Every
 # call authenticates with a fresh Bearer JWT and only on the tenant's own
 # domain.
-config TEDGE_HTTP
+# The client's own HTTP/1.1 client (core/src/tedge_http.c), on the port's
+# sockets: enrollment's one request, and every file transfer.
+config TEDGE_HTTP_CLIENT
 	bool
-	select HTTP_CLIENT
 	select NET_SOCKETS
 	select NET_SOCKETS_SOCKOPT_TLS
 	select DNS_RESOLVER
+
+# Downloads and uploads, for the features that transfer files.
+config TEDGE_HTTP
+	bool
+	select TEDGE_HTTP_CLIENT
 
 if TEDGE_HTTP
 

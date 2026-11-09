@@ -13,50 +13,31 @@
  * length that goes on the wire, whatever the source does underneath.
  */
 
+#include "tedge_http.h"
 #include "tedge_internal.h"
+#include "tedge_util.h"
 
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/net/http/client.h>
-#include <zephyr/net/socket.h>
-#include <zephyr/net/tls_credentials.h>
+#include <tedge/port/log.h>
+#include <tedge/port/net.h>
 
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <strings.h>
 
-LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_DECLARE();
 
 #define RX_SIZE   512
 #define SEND_SIZE 256
-
-static struct tedge_upload *current;
 
 /* ------------------------------------------------------------------------ */
 /* The body                                                                  */
 /* ------------------------------------------------------------------------ */
 
-static int send_all(int sock, const uint8_t *data, size_t len)
-{
-	size_t sent = 0;
-
-	while (sent < len) {
-		int ret = zsock_send(sock, data + sent, len - sent, 0);
-
-		if (ret <= 0) {
-			return (ret == 0) ? -ECONNRESET : -errno;
-		}
-		sent += (size_t)ret;
-	}
-	return (int)sent;
-}
-
 /* The sink the producer writes through while the request body is on the
  * wire: it sends, counts, and refuses more than the length promised in the
  * header. */
 struct wire {
-	int sock;
+	int conn;
 	size_t left;
 	int rc;
 };
@@ -69,8 +50,8 @@ static int wire_sink(const void *data, size_t len, void *ctx)
 	if (w->left == 0) {
 		return -ENOSPC; /* the producer has more to say than it said */
 	}
-	len = MIN(len, w->left);
-	ret = send_all(w->sock, data, len);
+	len = TEDGE_MIN(len, w->left);
+	ret = tedge_http_send_all(w->conn, data, len);
 	if (ret < 0) {
 		w->rc = ret;
 		return ret;
@@ -79,19 +60,12 @@ static int wire_sink(const void *data, size_t len, void *ctx)
 	return 0;
 }
 
-static int send_body(int sock, struct http_request *req, void *user_data)
+static int send_body(int conn, void *ctx)
 {
-	struct tedge_upload *up = user_data;
-	struct wire w = { .sock = sock, .left = up->length };
+	struct tedge_upload *up = ctx;
+	struct wire w = { .conn = conn, .left = up->length };
 	uint8_t pad[SEND_SIZE];
 
-	ARG_UNUSED(req);
-	if (up->payload != NULL) {
-		int ret = send_all(sock, (const uint8_t *)up->payload,
-				   up->length);
-
-		return (ret < 0) ? ret : (int)up->length;
-	}
 	(void)up->producer(wire_sink, &w, up->user_data);
 	if (w.rc != 0) {
 		return w.rc;
@@ -100,55 +74,29 @@ static int send_body(int sock, struct http_request *req, void *user_data)
 	 * Content-Length promised; spaces are harmless in a log. */
 	memset(pad, ' ', sizeof(pad));
 	while (w.left > 0) {
-		size_t n = MIN(w.left, sizeof(pad));
-		int ret = send_all(sock, pad, n);
+		size_t n = TEDGE_MIN(w.left, sizeof(pad));
+		int ret = tedge_http_send_all(conn, pad, n);
 
 		if (ret < 0) {
 			return ret;
 		}
 		w.left -= n;
 	}
-	return (int)up->length;
-}
-
-/* ------------------------------------------------------------------------ */
-/* Headers worth keeping                                                     */
-/* ------------------------------------------------------------------------ */
-
-static enum { HDR_OTHER, HDR_LOCATION } header_kind;
-
-static int on_header_field(struct http_parser *parser, const char *at,
-			   size_t length)
-{
-	ARG_UNUSED(parser);
-	header_kind = (length == 8 && strncasecmp(at, "location", 8) == 0)
-			      ? HDR_LOCATION
-			      : HDR_OTHER;
 	return 0;
 }
 
-static int on_header_value(struct http_parser *parser, const char *at,
-			   size_t length)
+/* The Location header, when the caller wants it. */
+static void on_header(const char *name, const char *piece, size_t len,
+		      size_t offset, bool last, void *ctx)
 {
-	struct tedge_upload *up = current;
+	struct tedge_upload *up = ctx;
 
-	ARG_UNUSED(parser);
-	if (header_kind == HDR_LOCATION && up != NULL && up->location != NULL &&
-	    length < up->location_len) {
-		memcpy(up->location, at, length);
-		up->location[length] = '\0';
+	TEDGE_UNUSED(last);
+	if (strcmp(name, "location") == 0 && up->location != NULL &&
+	    offset + len < up->location_len) {
+		memcpy(up->location + offset, piece, len);
+		up->location[offset + len] = '\0';
 	}
-	return 0;
-}
-
-static int on_response(struct http_response *rsp, enum http_final_call final,
-		       void *user_data)
-{
-	struct tedge_upload *up = user_data;
-
-	ARG_UNUSED(final);
-	up->status = rsp->http_status_code;
-	return 0;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -157,23 +105,15 @@ static int on_response(struct http_response *rsp, enum http_final_call final,
 
 int tedge_upload(struct tedge_upload *req)
 {
-	static const sec_tag_t tags[] = { TEDGE_TAG_SERVER_CA };
-	struct http_parser_settings cb = { .on_header_field = on_header_field,
-					   .on_header_value = on_header_value };
-	struct zsock_addrinfo hints = { .ai_family = AF_INET,
-					.ai_socktype = SOCK_STREAM };
-	struct zsock_addrinfo *res = NULL;
-	struct http_request hr = { 0 };
-	const char *headers[4] = { 0 };
 	static uint8_t rx[RX_SIZE];
+	const char *headers[4] = { 0 };
 	char auth[1100];
 	char disposition[96];
 	char host[TEDGE_HOST_MAX];
-	char port_s[8];
 	const char *path;
 	uint16_t port;
 	bool tls;
-	int fd = -1, ret, h = 0;
+	int conn, ret, h = 0;
 
 	if (req == NULL || req->url == NULL ||
 	    (req->payload == NULL && req->producer == NULL)) {
@@ -187,34 +127,13 @@ int tedge_upload(struct tedge_upload *req)
 	}
 	ret = tedge_url_split(req->url, &tls, host, sizeof(host), &port, &path);
 	if (ret != 0) {
-		LOG_ERR("upload: cannot parse the URL");
+		TEDGE_LOG_ERR("upload: cannot parse the URL");
 		return ret;
 	}
-	snprintf(port_s, sizeof(port_s), "%u", port);
-	ret = zsock_getaddrinfo(host, port_s, &hints, &res);
-	if (ret != 0) {
-		LOG_ERR("upload: cannot resolve %s (%d)", host, ret);
-		return -EHOSTUNREACH;
-	}
-	fd = zsock_socket(AF_INET, SOCK_STREAM,
-			  tls ? IPPROTO_TLS_1_2 : IPPROTO_TCP);
-	if (fd < 0) {
-		zsock_freeaddrinfo(res);
-		return -errno;
-	}
-	if (tls) {
-		(void)zsock_setsockopt(fd, ZSOCK_SOL_TLS, ZSOCK_TLS_SEC_TAG_LIST,
-				       tags, sizeof(tags));
-		(void)zsock_setsockopt(fd, ZSOCK_SOL_TLS, ZSOCK_TLS_HOSTNAME,
-				       host, strlen(host) + 1);
-	}
-	ret = zsock_connect(fd, res->ai_addr, res->ai_addrlen);
-	zsock_freeaddrinfo(res);
-	if (ret < 0) {
-		ret = -errno;
-		LOG_ERR("upload: cannot connect to %s (%d)", host, ret);
-		zsock_close(fd);
-		return ret;
+	conn = tedge_http_connect(host, port, tls, req->timeout_ms);
+	if (conn < 0) {
+		TEDGE_LOG_ERR("upload: cannot connect to %s (%d)", host, conn);
+		return conn;
 	}
 
 	/* Cumulocity answers 201 with an empty body and no Location unless it
@@ -238,35 +157,37 @@ int tedge_upload(struct tedge_upload *req)
 	if (req->payload != NULL && req->length == 0) {
 		req->length = strlen(req->payload);
 	}
-	header_kind = HDR_OTHER;
 	req->status = 0;
+	{
+		struct tedge_http_request hr = {
+			.method = "POST",
+			.host = host,
+			.path = path,
+			.headers = headers,
+			.content_type = (req->content_type != NULL)
+						? req->content_type
+						: "text/plain",
+			.payload = req->payload,
+			.send = (req->payload == NULL) ? send_body : NULL,
+			.body_len = req->length,
+			.on_header = on_header,
+			.ctx = req,
+			.buf = rx,
+			.buf_len = sizeof(rx),
+			.timeout_ms = (uint32_t)req->timeout_ms,
+		};
 
-	hr.method = HTTP_POST;
-	hr.url = path;
-	hr.host = host;
-	hr.protocol = "HTTP/1.1";
-	hr.content_type_value = (req->content_type != NULL) ? req->content_type
-							    : "text/plain";
-	hr.header_fields = headers;
-	hr.payload_cb = send_body;
-	hr.payload_len = req->length;
-	hr.response = on_response;
-	hr.http_cb = &cb;
-	hr.recv_buf = rx;
-	hr.recv_buf_len = sizeof(rx);
-
-	current = req;
-	ret = http_client_req(fd, &hr, req->timeout_ms, req);
-	current = NULL;
+		ret = tedge_http_exchange(conn, &hr, &req->status);
+	}
 	memset(auth, 0, sizeof(auth));
-	zsock_close(fd);
+	tedge_port_close(conn);
 
 	if (ret < 0) {
-		LOG_ERR("upload: the request failed (%d)", ret);
+		TEDGE_LOG_ERR("upload: the request failed (%d)", ret);
 		return ret;
 	}
 	if (req->status < 200 || req->status >= 300) {
-		LOG_ERR("upload: the server answered %d", req->status);
+		TEDGE_LOG_ERR("upload: the server answered %d", req->status);
 		return -EIO;
 	}
 	return 0;

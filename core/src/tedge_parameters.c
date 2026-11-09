@@ -10,28 +10,30 @@
  * state.
  *
  * Three places have to agree, and they are kept in this order: the values
- * here, the settings subtree "tedge/param/<set>/<name>", and the twin
+ * here, the stored keys "tedge/param/<set>/<name>", and the twin
  * fragment named after the set. Nothing is uploaded or downloaded — a
  * change travels inside its operation, which is why this file needs no HTTP
  * client and no filesystem.
  *
  * The declaration is the application's flash. What costs RAM here is one
- * current value per declared parameter (CONFIG_TEDGE_PARAMETERS_MAX), plus
+ * current value per declared parameter (TEDGE_PARAMETERS_MAX), plus
  * one heap allocation per string parameter, sized by the declaration and
  * made once.
  */
 
 #include "tedge_internal.h"
+#include "tedge_util.h"
 #include <tedge/tedge.h>
 
-#include <zephyr/logging/log.h>
-#include <zephyr/settings/settings.h>
+#include <tedge/port/kv.h>
+#include <tedge/port/log.h>
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_DECLARE();
 
 /* A device declares one set per thing it is; four is already generous, and
  * a set costs a pointer table whether or not it is used. This is not a
@@ -62,7 +64,7 @@ struct param_set {
 
 static struct param_set sets[MAX_SETS];
 static size_t n_sets;
-static struct param_value values[CONFIG_TEDGE_PARAMETERS_MAX];
+static struct param_value values[TEDGE_PARAMETERS_MAX];
 static size_t n_values;
 
 /* ------------------------------------------------------------------------ */
@@ -218,7 +220,7 @@ static int check_value(const struct tedge_parameter *p, const char *raw,
 /* ------------------------------------------------------------------------ */
 /* Storage                                                                   */
 /*                                                                           */
-/* One settings key per parameter, written only when a value actually        */
+/* One stored key per parameter, written only when a value actually          */
 /* changes, so an operator pressing "save" with nothing changed costs no     */
 /* flash.                                                                    */
 /* ------------------------------------------------------------------------ */
@@ -236,54 +238,54 @@ static int store(const struct param_set *set, const struct tedge_parameter *p,
 	key_of(set->name, p->name, key, sizeof(key));
 	switch (p->type) {
 	case TEDGE_PARAM_TYPE_BOOL:
-		return settings_save_one(key, &v->v.b, sizeof(v->v.b));
+		return tedge_port_kv_set(key, &v->v.b, sizeof(v->v.b));
 	case TEDGE_PARAM_TYPE_INT:
-		return settings_save_one(key, &v->v.i, sizeof(v->v.i));
+		return tedge_port_kv_set(key, &v->v.i, sizeof(v->v.i));
 	case TEDGE_PARAM_TYPE_STRING:
 	case TEDGE_PARAM_TYPE_ENUM:
-		return settings_save_one(key, v->v.s, strlen(v->v.s) + 1);
+		return tedge_port_kv_set(key, v->v.s, strlen(v->v.s) + 1);
 	}
 	return -EINVAL;
 }
 
-struct load_ctx {
-	const struct tedge_parameter *p;
-	struct param_value *v;
-};
-
-static int load_cb(const char *key, size_t len, settings_read_cb read_cb,
-		   void *cb_arg, void *param)
+/* Reads the stored value of one parameter over its current one. A value of
+ * the wrong size is left alone, as if nothing were stored. */
+static void load_value(const char *key, const struct tedge_parameter *p,
+		       struct param_value *v)
 {
-	struct load_ctx *ctx = param;
-	const struct tedge_parameter *p = ctx->p;
-
-	ARG_UNUSED(key);
 	switch (p->type) {
-	case TEDGE_PARAM_TYPE_BOOL:
-		if (len == sizeof(bool)) {
-			(void)read_cb(cb_arg, &ctx->v->v.b, sizeof(bool));
+	case TEDGE_PARAM_TYPE_BOOL: {
+		bool b;
+
+		if (tedge_port_kv_get(key, &b, sizeof(b)) == sizeof(b)) {
+			v->v.b = b;
 		}
 		break;
-	case TEDGE_PARAM_TYPE_INT:
-		if (len == sizeof(int32_t)) {
-			(void)read_cb(cb_arg, &ctx->v->v.i, sizeof(int32_t));
+	}
+	case TEDGE_PARAM_TYPE_INT: {
+		int32_t i;
+
+		if (tedge_port_kv_get(key, &i, sizeof(i)) == sizeof(i)) {
+			v->v.i = i;
 		}
 		break;
+	}
 	case TEDGE_PARAM_TYPE_STRING:
 	case TEDGE_PARAM_TYPE_ENUM: {
 		size_t cap = string_capacity(p);
+		int n;
 
-		if (ctx->v->v.s != NULL && len > 0 && len <= cap) {
-			ssize_t n = read_cb(cb_arg, ctx->v->v.s, cap - 1);
-
-			if (n >= 0) {
-				ctx->v->v.s[n] = '\0';
-			}
+		if (v->v.s == NULL) {
+			break;
+		}
+		/* Stored with its NUL, so a value that fits is at most cap. */
+		n = tedge_port_kv_get(key, v->v.s, cap);
+		if (n > 0) {
+			v->v.s[TEDGE_MIN((size_t)n, cap - 1)] = '\0';
 		}
 		break;
 	}
 	}
-	return 0;
 }
 
 /* Put whatever is stored over the defaults. A stored value that no longer
@@ -295,13 +297,12 @@ static void load_stored(struct param_set *set)
 		const struct tedge_parameter *p = &set->params[i];
 		struct param_value *v = value_of(set, i);
 		struct param_value before = *v;
-		struct load_ctx ctx = { .p = p, .v = v };
 		char key[KEY_MAX];
 		char raw[64];
 		char reason[96];
 
 		key_of(set->name, p->name, key, sizeof(key));
-		(void)settings_load_subtree_direct(key, load_cb, &ctx);
+		load_value(key, p, v);
 
 		/* Re-check it, because the declaration may have moved. */
 		switch (p->type) {
@@ -319,10 +320,10 @@ static void load_stored(struct param_set *set)
 			break;
 		}
 		if (check_value(p, raw, reason, sizeof(reason)) != 0) {
-			LOG_WRN("params: %s/%s: stored value dropped (%s)",
+			TEDGE_LOG_WRN("params: %s/%s: stored value dropped (%s)",
 				set->name, p->name, reason);
 			*v = before;
-			(void)settings_delete(key);
+			(void)tedge_port_kv_delete(key);
 		}
 	}
 }
@@ -357,7 +358,7 @@ static void publish(const struct param_set *set)
 	size_t n;
 
 	if (json == NULL) {
-		LOG_ERR("params: %s: no heap for the twin fragment", set->name);
+		TEDGE_LOG_ERR("params: %s: no heap for the twin fragment", set->name);
 		return;
 	}
 	n = snprintf(json, size, "{");
@@ -413,7 +414,7 @@ static int check_declaration(const struct tedge_parameter *params, size_t count)
 		}
 		for (size_t j = 0; j < i; j++) {
 			if (strcmp(params[j].name, p->name) == 0) {
-				LOG_ERR("params: '%s' declared twice", p->name);
+				TEDGE_LOG_ERR("params: '%s' declared twice", p->name);
 				return -EINVAL;
 			}
 		}
@@ -424,36 +425,36 @@ static int check_declaration(const struct tedge_parameter *params, size_t count)
 			char raw[16];
 
 			if (p->min > p->max) {
-				LOG_ERR("params: '%s': min above max", p->name);
+				TEDGE_LOG_ERR("params: '%s': min above max", p->name);
 				return -EINVAL;
 			}
 			snprintf(raw, sizeof(raw), "%d", p->def.i);
 			if (check_value(p, raw, reason, sizeof(reason)) != 0) {
-				LOG_ERR("params: default %s", reason);
+				TEDGE_LOG_ERR("params: default %s", reason);
 				return -EINVAL;
 			}
 			break;
 		}
 		case TEDGE_PARAM_TYPE_STRING:
 			if (p->max_len == 0) {
-				LOG_ERR("params: '%s': zero max_len", p->name);
+				TEDGE_LOG_ERR("params: '%s': zero max_len", p->name);
 				return -EINVAL;
 			}
 			if (p->def.s != NULL &&
 			    check_value(p, p->def.s, reason, sizeof(reason)) != 0) {
-				LOG_ERR("params: default %s", reason);
+				TEDGE_LOG_ERR("params: default %s", reason);
 				return -EINVAL;
 			}
 			break;
 		case TEDGE_PARAM_TYPE_ENUM:
 			if (p->allowed == NULL || p->allowed[0] == NULL) {
-				LOG_ERR("params: '%s': no allowed values",
+				TEDGE_LOG_ERR("params: '%s': no allowed values",
 					p->name);
 				return -EINVAL;
 			}
 			if (p->def.s == NULL ||
 			    check_value(p, p->def.s, reason, sizeof(reason)) != 0) {
-				LOG_ERR("params: default %s", reason);
+				TEDGE_LOG_ERR("params: default %s", reason);
 				return -EINVAL;
 			}
 			break;
@@ -480,13 +481,13 @@ int tedge_declare_parameters(const char *set_name,
 		return -EEXIST;
 	}
 	if (n_sets == MAX_SETS) {
-		LOG_ERR("params: no free set slot (%d)", MAX_SETS);
+		TEDGE_LOG_ERR("params: no free set slot (%d)", MAX_SETS);
 		return -ENOSPC;
 	}
-	if (n_values + count > CONFIG_TEDGE_PARAMETERS_MAX) {
-		LOG_ERR("params: %zu parameters wanted, %d left (raise "
-			"CONFIG_TEDGE_PARAMETERS_MAX)",
-			count, CONFIG_TEDGE_PARAMETERS_MAX - (int)n_values);
+	if (n_values + count > TEDGE_PARAMETERS_MAX) {
+		TEDGE_LOG_ERR("params: %zu parameters wanted, %d left (raise "
+			TEDGE_CONFIG_NAME(TEDGE_PARAMETERS_MAX) ")",
+			count, TEDGE_PARAMETERS_MAX - (int)n_values);
 		return -ENOSPC;
 	}
 	/* The name is also the DTM identifier, the twin fragment and the
@@ -494,7 +495,7 @@ int tedge_declare_parameters(const char *set_name,
 	 * characters of it (tedge_op_json.c, tedge_c8y.c). */
 	if (strlen(set_name) > 39 ||
 	    strlen(TEDGE_KEY_PARAM) + strlen(set_name) + 2 >= KEY_MAX) {
-		LOG_ERR("params: set name '%s' is too long (at most 39)", set_name);
+		TEDGE_LOG_ERR("params: set name '%s' is too long (at most 39)", set_name);
 		return -EINVAL;
 	}
 	rc = check_declaration(params, count);
@@ -536,11 +537,11 @@ int tedge_declare_parameters(const char *set_name,
 
 	load_stored(set);
 	publish(set);
-	LOG_INF("params: declared '%s' with %zu parameters", set_name, count);
+	TEDGE_LOG_INF("params: declared '%s' with %zu parameters", set_name, count);
 	return 0;
 }
 
-#if defined(CONFIG_TEDGE_PARAMETERS_SCHEMA)
+#if defined(TEDGE_PARAMETERS_SCHEMA)
 /* ------------------------------------------------------------------------ */
 /* The schema                                                                */
 /*                                                                           */
@@ -658,96 +659,24 @@ int tedge_params_schema(const char *set_name, char *out, size_t len)
 
 #undef APPEND
 
-/* ------------------------------------------------------------------------ */
-/* "tedge params schema"                                                     */
-/*                                                                           */
-/* Whoever registers a set in the tenant needs its schema, and the device is */
-/* the only thing that knows what the running image actually declares. A     */
-/* console command is the shortest path from one to the other.               */
-/* ------------------------------------------------------------------------ */
-
-#if defined(CONFIG_SHELL)
-#include <zephyr/shell/shell.h>
-
-/* Big enough for a set of a dozen parameters with their descriptions; the
- * generator says so rather than truncating when it is not. */
-#define SCHEMA_BUF 2048
-
-static int print_schema(const struct shell *sh, const char *set_name)
+/* The declared sets, for the port's console commands ("tedge params"). */
+size_t tedge_params_set_count(void)
 {
-	char *buf = tedge_alloc(SCHEMA_BUF);
-	int rc;
-
-	if (buf == NULL) {
-		shell_error(sh, "out of client heap");
-		return -ENOMEM;
-	}
-	rc = tedge_params_schema(set_name, buf, SCHEMA_BUF);
-	if (rc == -ENOENT) {
-		shell_error(sh, "no parameter set '%s' is declared", set_name);
-	} else if (rc == -ENOMEM) {
-		shell_error(sh, "'%s' needs more than %d bytes of schema",
-			    set_name, SCHEMA_BUF);
-	} else if (rc < 0) {
-		shell_error(sh, "could not produce the schema (%d)", rc);
-	} else {
-		shell_print(sh, "%s", buf);
-	}
-	tedge_free(buf);
-	return rc < 0 ? rc : 0;
+	return n_sets;
 }
 
-static int cmd_params_schema(const struct shell *sh, size_t argc, char **argv)
+const char *tedge_params_set_name(size_t index, size_t *count)
 {
-	if (argc > 1) {
-		return print_schema(sh, argv[1]);
+	if (index >= n_sets) {
+		return NULL;
 	}
-	if (n_sets == 0) {
-		shell_warn(sh, "this image declares no parameter set");
-		return 0;
+	if (count != NULL) {
+		*count = sets[index].count;
 	}
-	for (size_t i = 0; i < n_sets; i++) {
-		int rc = print_schema(sh, sets[i].name);
-
-		if (rc != 0) {
-			return rc;
-		}
-	}
-	return 0;
+	return sets[index].name;
 }
 
-static int cmd_params_list(const struct shell *sh, size_t argc, char **argv)
-{
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
-
-	if (n_sets == 0) {
-		shell_warn(sh, "this image declares no parameter set");
-		return 0;
-	}
-	for (size_t i = 0; i < n_sets; i++) {
-		shell_print(sh, "%s (%zu parameters)", sets[i].name,
-			    sets[i].count);
-	}
-	return 0;
-}
-
-SHELL_STATIC_SUBCMD_SET_CREATE(
-	params_cmds,
-	SHELL_CMD_ARG(schema, NULL,
-		      "Print the registration body for a set, or for every "
-		      "set.\nUsage: tedge params schema [<set>]",
-		      cmd_params_schema, 1, 1),
-	SHELL_CMD(list, NULL, "List the declared parameter sets",
-		  cmd_params_list),
-	SHELL_SUBCMD_SET_END);
-
-/* The root itself belongs to tedge_core.c; this only adds a branch to it. */
-SHELL_SUBCMD_ADD((tedge), params, &params_cmds,
-		 "Parameters the cloud may change", NULL, 1, 0);
-#endif /* CONFIG_SHELL */
-
-#endif /* CONFIG_TEDGE_PARAMETERS_SCHEMA */
+#endif /* TEDGE_PARAMETERS_SCHEMA */
 
 /* ------------------------------------------------------------------------ */
 /* Applying a change                                                         */
@@ -984,7 +913,7 @@ int tedge_params_apply(const char *set_name, const char *json, char *reason,
 					 "%s: the application refused the change",
 					 set_name);
 			}
-			LOG_WRN("params: %s: rolled back (%s)", set_name,
+			TEDGE_LOG_WRN("params: %s: rolled back (%s)", set_name,
 				reason);
 			return rc;
 		}
@@ -999,13 +928,13 @@ int tedge_params_apply(const char *set_name, const char *json, char *reason,
 			continue;
 		}
 		if (store(set, p, now) != 0) {
-			LOG_ERR("params: %s/%s: could not be stored", set_name,
+			TEDGE_LOG_ERR("params: %s/%s: could not be stored", set_name,
 				p->name);
 		}
 	}
 	backup_free(&saved);
 	publish(set);
-	LOG_INF("params: %s: %zu value(s) changed", set_name, applied);
+	TEDGE_LOG_INF("params: %s: %zu value(s) changed", set_name, applied);
 	return 0;
 }
 
@@ -1049,26 +978,20 @@ static bool declared(const char *relative)
 	return find_param(set, slash + 1, &index) != NULL;
 }
 
-static int sweep_cb(const char *key, size_t len, settings_read_cb read_cb,
-		    void *cb_arg, void *param)
+static void sweep_cb(const char *key, void *param)
 {
 	struct sweep_ctx *ctx = param;
 
-	ARG_UNUSED(len);
-	ARG_UNUSED(read_cb);
-	ARG_UNUSED(cb_arg);
-
 	/* @p key is relative to the subtree: "<set>/<name>". */
 	if (declared(key)) {
-		return 0;
+		return;
 	}
 	if (ctx->count == MAX_ORPHANS) {
 		ctx->full = true;
-		return 0;
+		return;
 	}
 	snprintf(ctx->orphan[ctx->count], KEY_MAX, TEDGE_KEY_PARAM "/%s", key);
 	ctx->count++;
-	return 0;
 }
 
 void tedge_params_on_start(void)
@@ -1077,15 +1000,15 @@ void tedge_params_on_start(void)
 
 	ctx.count = 0;
 	ctx.full = false;
-	(void)settings_load_subtree_direct(TEDGE_KEY_PARAM, sweep_cb, &ctx);
+	(void)tedge_port_kv_foreach(TEDGE_KEY_PARAM, sweep_cb, &ctx);
 
 	for (size_t i = 0; i < ctx.count; i++) {
-		LOG_INF("params: forgetting '%s', which nothing declares now",
+		TEDGE_LOG_INF("params: forgetting '%s', which nothing declares now",
 			ctx.orphan[i]);
-		(void)settings_delete(ctx.orphan[i]);
+		(void)tedge_port_kv_delete(ctx.orphan[i]);
 	}
 	if (ctx.full) {
-		LOG_WRN("params: more than %d stored values to forget; the "
+		TEDGE_LOG_WRN("params: more than %d stored values to forget; the "
 			"rest go on the next boot", MAX_ORPHANS);
 	}
 }

@@ -658,9 +658,12 @@ tiny-edge/
 ├── certs/                    default trust anchors
 └── ports/zephyr/
     ├── CMakeLists.txt, Kconfig
+    ├── cmake/                generates <tedge_config.h> from Kconfig
     ├── include/tedge/        Zephyr-only public headers (mbedTLS config)
-    ├── src/                  Zephyr-only sources: platform, time, shell,
-    │                         log backend, coredump
+    ├── include/tedge_port/   the port interface's types and log macros
+    ├── src/                  Zephyr-only sources: the port interface
+    │                         (tedge_port*.c, time, platform), the
+    │                         console commands, log backend, coredump
     ├── profiles/             feature sets (minimal, ota, full) and per-board
     │                         sizing (boards/, extras/)
     ├── samples/minimal/      builds with Zephyr and this module only
@@ -673,9 +676,9 @@ failure on hardware: which counters to trust, the two ESP32 allocation
 failures that look alike, and the measurement traps that make a broken
 session look healthy.
 
-Some files in `core/` still call Zephyr directly; they are moving behind the
-port interface one at a time. `scripts/check-portability.py` lists them and
-stops new ones from appearing.
+The core (`core/`) calls nothing in Zephyr: everything it needs from the
+RTOS goes through the port interface (`include/tedge/port/`), which this
+directory implements. `scripts/check-portability.py` keeps it that way.
 
 ## Version
 

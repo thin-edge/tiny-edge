@@ -17,7 +17,13 @@ if(CONFIG_TEDGE)
   zephyr_library_sources(
     ${TEDGE_CORE_SRC}/tedge_version.c
     ${TEDGE_CORE_SRC}/tedge_core.c
+    ${TEDGE_CORE_SRC}/tedge_absent.c
+    ${TEDGE_CORE_SRC}/tedge_device.c
     src/tedge_platform.c
+    src/tedge_port.c
+    src/tedge_port_os.c
+    src/tedge_port_kv.c
+    src/tedge_port_net.c
     src/tedge_time.c
     ${TEDGE_CORE_SRC}/tedge_backoff.c
     ${TEDGE_CORE_SRC}/tedge_json.c
@@ -26,6 +32,8 @@ if(CONFIG_TEDGE)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_HEALTH ${TEDGE_CORE_SRC}/tedge_health.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_TRANSPORT_C8Y
     ${TEDGE_CORE_SRC}/tedge_c8y.c
+    ${TEDGE_CORE_SRC}/tedge_codec.c
+    ${TEDGE_CORE_SRC}/tedge_mqtt.c
     ${TEDGE_CORE_SRC}/tedge_smartrest.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_C8Y_OPERATION_JSON
@@ -33,6 +41,7 @@ if(CONFIG_TEDGE)
   )
   # The HTTP client belongs to every file-transfer feature, not to the first
   # one that needed it.
+  zephyr_library_sources_ifdef(CONFIG_TEDGE_HTTP_CLIENT ${TEDGE_CORE_SRC}/tedge_http.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_HTTP
     ${TEDGE_CORE_SRC}/tedge_http_download.c
     ${TEDGE_CORE_SRC}/tedge_http_upload.c
@@ -40,6 +49,7 @@ if(CONFIG_TEDGE)
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_FIRMWARE_UPDATE
     ${TEDGE_CORE_SRC}/tedge_firmware.c
+    src/tedge_port_fw.c
     ${TEDGE_CORE_SRC}/tedge_fw_decision.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_SHELL_COMMAND
@@ -48,24 +58,28 @@ if(CONFIG_TEDGE)
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_LOG_UPLOAD
     ${TEDGE_CORE_SRC}/tedge_log_upload.c
-    src/tedge_log_ring.c
+    ${TEDGE_CORE_SRC}/tedge_log_ring.c
+    src/tedge_log_backend.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_PARAMETERS ${TEDGE_CORE_SRC}/tedge_parameters.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_PARAMETERS_SELF
     ${TEDGE_CORE_SRC}/tedge_self_params.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_COREDUMP src/tedge_coredump.c)
+  zephyr_library_sources_ifdef(CONFIG_SHELL src/tedge_shell.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_CERT_RENEWAL
     ${TEDGE_CORE_SRC}/tedge_cert_renew.c
     ${TEDGE_CORE_SRC}/tedge_cert_decision.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_REMOTE_ACCESS
     ${TEDGE_CORE_SRC}/tedge_remote_access.c
+    ${TEDGE_CORE_SRC}/tedge_ws.c
     ${TEDGE_CORE_SRC}/tedge_ra_allow_list.c
     ${TEDGE_CORE_SRC}/tedge_ra_target.c
   )
   zephyr_library_sources_ifdef(CONFIG_TEDGE_AUTH_C8Y_CA
     ${TEDGE_CORE_SRC}/tedge_enroll.c
+    src/tedge_port_crypto.c
     ${TEDGE_CORE_SRC}/tedge_otp.c
     ${TEDGE_CORE_SRC}/tedge_pkcs7.c
   )
@@ -80,6 +94,12 @@ if(CONFIG_TEDGE)
   # (include/tedge/mbedtls_user_config.h, which mbedTLS itself includes).
   zephyr_include_directories(${TEDGE_ROOT}/include include)
   zephyr_library_include_directories(${TEDGE_CORE_SRC})
+
+  # The core reads its configuration as TEDGE_* from <tedge_config.h>,
+  # generated from this port's Kconfig (cmake/tedge_config.cmake).
+  include(${CMAKE_CURRENT_LIST_DIR}/cmake/tedge_config.cmake)
+  tedge_generate_config(${CMAKE_CURRENT_BINARY_DIR}/generated)
+  zephyr_library_include_directories(${CMAKE_CURRENT_BINARY_DIR}/generated)
 
   # Trust anchors: every PEM in CONFIG_TEDGE_C8Y_CA_FILES is concatenated
   # into one bundle and embedded as tedge_ca_bundle.inc.

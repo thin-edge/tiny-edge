@@ -14,6 +14,8 @@
 
 #include "tedge_internal.h"
 
+#include <tedge/port/config.h>
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -55,7 +57,8 @@ bool tedge_shell_command_allowed(const char *list, const char *cmd,
 	if (list == NULL || *skip_spaces(list) == '\0') {
 		if (why != NULL) {
 			*why = "this device runs no commands: its allow-list "
-			       "(CONFIG_TEDGE_SHELL_COMMAND_ALLOW_LIST) is empty";
+			       "(" TEDGE_CONFIG_NAME(TEDGE_SHELL_COMMAND_ALLOW_LIST)
+			       ") is empty";
 		}
 		return false;
 	}
@@ -141,8 +144,9 @@ int tedge_shell_help_text(const char *list, char *buf, size_t len)
 	}
 	if (count == 0) {
 		snprintf(buf, len, "%s", "This device runs no commands: its "
-			 "allow-list (CONFIG_TEDGE_SHELL_COMMAND_ALLOW_LIST) is "
-			 "empty.");
+			 "allow-list ("
+			 TEDGE_CONFIG_NAME(TEDGE_SHELL_COMMAND_ALLOW_LIST)
+			 ") is empty.");
 	}
 	return (n >= len) ? -ENOSPC : count;
 }

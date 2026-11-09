@@ -14,14 +14,15 @@
  */
 
 #include "tedge_internal.h"
+#include "tedge_util.h"
 
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
+#include <tedge/port/config.h>
+#include <tedge/port/log.h>
 
 #include <stdio.h>
 #include <string.h>
 
-LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
+TEDGE_LOG_DECLARE();
 
 /* Cumulocity delivers an operation as JSON on devicecontrol/notifications,
  * which is the only delivery that carries the operation's id. The fields
@@ -58,7 +59,7 @@ static void put_field(char *line, size_t len, const char *frag,
 	snprintf(line + n, len - n, ",%s", quoted);
 }
 
-#if defined(CONFIG_TEDGE_PARAMETERS)
+#if defined(TEDGE_PARAMETERS)
 /* A parameter change is shaped unlike every other operation, in two ways.
  *
  * It does not name a fixed fragment: the set's name is the suffix of
@@ -169,17 +170,17 @@ static bool parameter_update(const char *json, const char *id, char *line,
 		}
 		object[n] = '\0';
 		if (depth != 0) {
-			LOG_WRN("parameter change for '%s' is too big to read",
+			TEDGE_LOG_WRN("parameter change for '%s' is too big to read",
 				set);
 			return false;
 		}
 		(void)tedge_sr_quote(object, quoted, sizeof(quoted));
 	}
 	snprintf(line, len, "532,%s,%s,%s", id, set, quoted);
-	LOG_INF("operation c8y_ParameterUpdate_%s (%s)", set, id);
+	TEDGE_LOG_INF("operation c8y_ParameterUpdate_%s (%s)", set, id);
 	return true;
 }
-#endif /* CONFIG_TEDGE_PARAMETERS */
+#endif /* TEDGE_PARAMETERS */
 
 bool tedge_operation_from_json(const char *json, char *line, size_t len)
 {
@@ -203,12 +204,12 @@ bool tedge_operation_from_json(const char *json, char *line, size_t len)
 	if (tedge_json_value(json, "id", id, sizeof(id)) <= 0) {
 		return false; /* not an operation, or not one we can answer */
 	}
-#if defined(CONFIG_TEDGE_PARAMETERS)
+#if defined(TEDGE_PARAMETERS)
 	if (parameter_update(json, id, line, len)) {
 		return true;
 	}
 #endif
-	for (size_t i = 0; i < ARRAY_SIZE(known); i++) {
+	for (size_t i = 0; i < TEDGE_ARRAY_SIZE(known); i++) {
 		if (!fragment_at(json, known[i].fragment, &frag)) {
 			continue;
 		}
@@ -216,12 +217,12 @@ bool tedge_operation_from_json(const char *json, char *line, size_t len)
 		for (int f = 0; known[i].fields[f] != NULL; f++) {
 			put_field(line, len, frag, known[i].fields[f]);
 		}
-		LOG_INF("operation %s (%s)", known[i].fragment, id);
+		TEDGE_LOG_INF("operation %s (%s)", known[i].fragment, id);
 		return true;
 	}
 	/* An operation this image has no idea about still has to be answered,
 	 * so it goes through the dispatcher as an unknown template. */
 	snprintf(line, len, "599,%s", id);
-	LOG_WRN("an operation arrived that this image does not know (%s)", id);
+	TEDGE_LOG_WRN("an operation arrived that this image does not know (%s)", id);
 	return true;
 }
