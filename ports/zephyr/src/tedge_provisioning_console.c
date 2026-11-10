@@ -3,7 +3,8 @@
  * Improv Serial on the Zephyr console, for the provisioning library
  * (include/tedge/provisioning.h).
  *
- * With the shell, the console is the shell's, and "tedge improv" lends it
+ * With the shell on the console (its serial backend), the console is the
+ * shell's, and "tedge improv" lends it
  * to a provisioning tool: the shell's bypass mode passes every received
  * byte to the library, until no valid frame has arrived for
  * CONFIG_TEDGE_PROVISIONING_SERIAL_IDLE_S. Frames go out through the
@@ -11,7 +12,9 @@
  * line never lands inside a frame, and unchanged (the shell's printing
  * would turn a 0x0A byte into CR LF).
  *
- * Without the shell, the console speaks Improv from boot: its UART is read
+ * Otherwise (no shell, or a shell with only other backends, such as the
+ * dummy one the remote shell command uses), the console speaks Improv from
+ * boot: its UART is read
  * by polling, which every UART driver supports, and a frame is written
  * with the scheduler locked, so the log thread cannot cut in.
  */
@@ -24,13 +27,13 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-#if defined(CONFIG_SHELL)
+#if defined(CONFIG_SHELL_BACKEND_SERIAL)
 #include <zephyr/shell/shell.h>
 #endif
 
 LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
 
-#if defined(CONFIG_SHELL)
+#if defined(CONFIG_SHELL_BACKEND_SERIAL)
 
 static const struct shell *lent; /* the shell whose console is lent */
 
@@ -110,7 +113,7 @@ SHELL_SUBCMD_ADD((tedge), improv, NULL,
 		 "Lend the console to a setup tool such as tedge-onboard",
 		 cmd_improv, 1, 0);
 
-#else /* !CONFIG_SHELL */
+#else /* !CONFIG_SHELL_BACKEND_SERIAL */
 
 #define POLL_MS 20
 
@@ -159,4 +162,4 @@ static int console_init(void)
 
 SYS_INIT(console_init, APPLICATION, 99);
 
-#endif /* CONFIG_SHELL */
+#endif /* CONFIG_SHELL_BACKEND_SERIAL */

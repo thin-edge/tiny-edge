@@ -837,15 +837,15 @@ config TEDGE_PROVISIONING_SERIAL
 	bool "Improv Serial on the console"
 	default y
 	help
-	  With the shell, "tedge improv" hands the console to a provisioning
-	  tool until it has been quiet for TEDGE_PROVISIONING_SERIAL_IDLE_S.
-	  Without the shell, the console speaks Improv from boot, beside the
-	  log output.
+	  With the shell on the console (SHELL_BACKEND_SERIAL), "tedge
+	  improv" hands the console to a provisioning tool until it has been
+	  quiet for TEDGE_PROVISIONING_SERIAL_IDLE_S. Otherwise the console
+	  speaks Improv from boot, beside the log output.
 
 config TEDGE_PROVISIONING_SERIAL_IDLE_S
 	int "Seconds without a valid frame before the shell gets the console back"
 	default 60
-	depends on TEDGE_PROVISIONING_SERIAL && SHELL
+	depends on TEDGE_PROVISIONING_SERIAL && SHELL_BACKEND_SERIAL
 
 config TEDGE_PROVISIONING_BLE
 	bool "Improv over Bluetooth LE (not implemented yet)"
