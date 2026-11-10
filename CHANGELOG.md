@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.3.0](https://github.com/thin-edge/tiny-edge/compare/v0.2.0...v0.3.0) (2026-11-10)
+
+
+### Features
+
+* **core:** read the device ID and tenant through the public API ([baf7af4](https://github.com/thin-edge/tiny-edge/commit/baf7af4a05fbebe87e28d06868d484d8349b6533))
+* **onboard:** offer the networks the board can see ([ee2735f](https://github.com/thin-edge/tiny-edge/commit/ee2735f37e3ba96bca4bd458d03cb41db4764d63))
+* **onboard:** tedge-onboard, set a device up from a computer ([7637e06](https://github.com/thin-edge/tiny-edge/commit/7637e064728fd9fc7322a760f9bee07c3d11a889))
+* **posix:** a POSIX port of the client ([1baacd9](https://github.com/thin-edge/tiny-edge/commit/1baacd9647610c8524fcc1562be3d7d9ed48a635))
+* **posix:** a POSIX port of the client ([50dc48b](https://github.com/thin-edge/tiny-edge/commit/50dc48babb588313825f69b090e67d38ba4ec9c4))
+* **posix:** sample application and port tests ([522c8c9](https://github.com/thin-edge/tiny-edge/commit/522c8c9f30205a7d7880c045cc8e9f0e24e34987))
+* **provisioning:** an Improv Wi-Fi library for setting a device up ([96eeb7d](https://github.com/thin-edge/tiny-edge/commit/96eeb7d622043e28caa422a876397cae5d97c93b))
+* **provisioning:** report the application's firmware name and version ([e2cdf67](https://github.com/thin-edge/tiny-edge/commit/e2cdf677978e70a190d810556e75a522246b24e3))
+* **provisioning:** report the Wi-Fi networks the board can see ([872404d](https://github.com/thin-edge/tiny-edge/commit/872404d23b31fb199e03dbc412d511ef475a9bd0))
+* set devices up over USB with tedge-onboard ([07a8559](https://github.com/thin-edge/tiny-edge/commit/07a855995778cb254bb22cc48c6d1420a702b038))
+* **zephyr:** a ready-made Wi-Fi scan hook for provisioning ([5766f14](https://github.com/thin-edge/tiny-edge/commit/5766f14881e56fd40e477e6fecbf743842cccdd8))
+* **zephyr:** Improv Serial on the console, and an onboarding sample ([6a537b1](https://github.com/thin-edge/tiny-edge/commit/6a537b1cabb15ba199a5944f8dac20c67a0fe3d6))
+* **zephyr:** one call starts provisioning with the port's hooks ([0d9440a](https://github.com/thin-edge/tiny-edge/commit/0d9440ad7bd2c24b8cda56788ccfe03f726e8fe6))
+* **zephyr:** one call starts provisioning with the port's hooks ([e5b14ba](https://github.com/thin-edge/tiny-edge/commit/e5b14ba1b4fdf44e086503da092f9bce4a3509db))
+
+
+### Bug Fixes
+
+* append formatted text without overrunning the buffer ([23350ab](https://github.com/thin-edge/tiny-edge/commit/23350ab6f348249f5d6ec09b54c3047fdcc3ea2e))
+* append formatted text without overrunning the buffer ([1696f82](https://github.com/thin-edge/tiny-edge/commit/1696f826b9bf98bab0e8246a2cdd9b2d7ca8aff9))
+* **core:** build without restart and firmware update with warnings as errors ([f3cb8b8](https://github.com/thin-edge/tiny-edge/commit/f3cb8b8e90c3e00962a28e722fd6cca1d663241e))
+* **core:** stop the client promptly while it waits for registration ([fbd0219](https://github.com/thin-edge/tiny-edge/commit/fbd02193ef4f76953ad40f0c352105b8e7398d45))
+* **remote-access:** relay what the target sent before it hung up ([26e87b3](https://github.com/thin-edge/tiny-edge/commit/26e87b30e90592052b9149c71924ee1ba6ef2a81))
+* **zephyr:** read the console directly when the shell is not on it ([c9cb45c](https://github.com/thin-edge/tiny-edge/commit/c9cb45c06315f28c2c474f0848645db8dead089b))
+
 ## [0.2.0](https://github.com/thin-edge/tiny-edge/compare/v0.1.0...v0.2.0) (2026-11-09)
 
 
