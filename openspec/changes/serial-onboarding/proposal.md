@@ -54,11 +54,20 @@ application that does not enable it.
 | `TEDGE_PROVISIONING_SERIAL` | on with `TEDGE_PROVISIONING` | Improv Serial over the console |
 | `TEDGE_PROVISIONING_BLE` | off (phase 2) | Improv over a BLE GATT service |
 
-The flash and RAM cost per board is measured in the tasks (ESP32-S3-DevKitC,
-ESP32-C6, ESP32-WROOM-32) and recorded here before the change is archived.
-The serial transport is expected to be small (a frame parser and buffers of
-a few hundred bytes). BLE costs what the Bluetooth stack costs, which is why
-it is a separate option and a separate phase.
+Measured on Zephyr's `samples/minimal` with the minimal profile and the
+onboarding overlay, against the same build with `TEDGE_PROVISIONING=n`
+(2026-11-10):
+
+| Board | Flash | Static RAM |
+|---|---|---|
+| ESP32-S3-DevKitC | +5.0 KB | +5.2 KB (4 KB of it the worker's stack) |
+| ESP32-C6-DevKitC | +5.8 KB | +0.5 KB, plus the 4 KB stack in `.noinit` |
+
+The ESP32-WROOM-32 is not measured: the minimal sample has no board file
+for it. The overlay itself also turns on the shell and Wi-Fi credential
+storage, which an application may already have; those are the
+application's cost, not the library's. BLE costs what the Bluetooth stack
+costs, which is why it is a separate option and a separate phase.
 
 ### Interface changes
 

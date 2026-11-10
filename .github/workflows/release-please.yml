@@ -20,9 +20,46 @@ jobs:
   release-please:
     name: Release PR and tag
     runs-on: ubuntu-24.04
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
           token: ${{ secrets.COMMUNITY_ACTIONS_PAT }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # tedge-onboard's binaries, attached to the release just published.
+  onboard-tool:
+    name: tedge-onboard for ${{ matrix.name }}
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - name: Linux and Windows
+            os: ubuntu-latest
+            targets: linux/amd64 linux/arm64 windows/amd64 windows/arm64
+          - name: macOS
+            os: macos-latest
+            targets: darwin/arm64 darwin/amd64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/onboard/go.mod
+          cache-dependency-path: tools/onboard/go.sum
+      - name: Build and attach
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: |
+          tools/onboard/build.sh "${TAG#v}" ${{ matrix.targets }}
+          gh release upload "$TAG" tools/onboard/dist/* --clobber

@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The host tools: tedge-onboard's checks and its builds for every platform.
+name: tools
+
+on:
+  pull_request:
+    paths: ["tools/**", ".github/workflows/tools.yml"]
+  push:
+    branches: [main]
+    paths: ["tools/**", ".github/workflows/tools.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: tedge-onboard checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/onboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/onboard/go.mod
+          cache-dependency-path: tools/onboard/go.sum
+      - name: Formatting
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    name: tedge-onboard on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - name: Linux and Windows
+            os: ubuntu-latest
+            targets: linux/amd64 linux/arm64 windows/amd64 windows/arm64
+          - name: macOS
+            os: macos-latest
+            targets: darwin/arm64 darwin/amd64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/onboard/go.mod
+          cache-dependency-path: tools/onboard/go.sum
+      - run: tools/onboard/build.sh "0.0.0-${GITHUB_SHA::7}" ${{ matrix.targets }}
