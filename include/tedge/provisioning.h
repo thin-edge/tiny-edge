@@ -83,6 +83,12 @@ struct tedge_provisioning_hooks {
 	 *  reports "unknown". */
 	const char *chip;
 
+	/** The firmware's name and version, for Improv's device info, when the
+	 *  application knows them better than the port does. NULL takes the
+	 *  port's (tedge_port_firmware_name() and _version()). */
+	const char *firmware_name;
+	const char *firmware_version;
+
 	void *ctx;
 };
 

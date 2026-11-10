@@ -215,6 +215,8 @@ static const struct tedge_provisioning_hooks hooks = {
 	.identify = identify,
 	.wifi_scan = wifi_scan,
 	.chip = "host",
+	.firmware_name = "test-app",
+	.firmware_version = "1.2.3",
 };
 
 int main(void)
@@ -241,6 +243,8 @@ int main(void)
 	/* Improv's device info: firmware, version, chip, the device's ID. */
 	send_rpc(0x03, NULL, 0);
 	CHECK(expect(&f) && f.type == 0x04 && f.data[0] == 0x03);
+	CHECK(result_string(&f, 0, s, sizeof(s)) && strcmp(s, "test-app") == 0);
+	CHECK(result_string(&f, 1, s, sizeof(s)) && strcmp(s, "1.2.3") == 0);
 	CHECK(result_string(&f, 2, s, sizeof(s)) && strcmp(s, "host") == 0);
 	CHECK(result_string(&f, 3, s, sizeof(s)) && strcmp(s, "tedge-prov-test") == 0);
 

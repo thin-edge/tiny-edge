@@ -75,3 +75,47 @@ func TestHardwareWiFiFailure(t *testing.T) {
 		t.Logf("log: %s", l)
 	}
 }
+
+// What the board prints, without resetting it, before and after "tedge
+// improv": for when a board does not answer.
+func TestHardwareConsole(t *testing.T) {
+	ports, err := Candidates()
+	if err != nil || len(ports) == 0 {
+		t.Skipf("no board: %v", err)
+	}
+	p, err := Open(ports[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := improv.NewClient(p)
+	defer c.Close()
+	_, _ = p.Write([]byte("\r\n"))
+	time.Sleep(2 * time.Second)
+	_ = c.Wake()
+	time.Sleep(2 * time.Second)
+	for _, l := range c.RecentLog() {
+		t.Logf("%s", l)
+	}
+}
+
+// The networks the board sees (the tool's Wi-Fi list).
+func TestHardwareScan(t *testing.T) {
+	ports, err := Candidates()
+	if err != nil || len(ports) == 0 {
+		t.Skipf("no board: %v", err)
+	}
+	b, err := Probe(context.Background(), ports[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Client.Close()
+	start := time.Now()
+	nets, err := b.Client.ScanNetworks(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%d networks in %v", len(nets), time.Since(start))
+	for _, n := range nets {
+		t.Logf("%4d dBm  secured=%v  (%d-character name)", n.RSSI, n.Secured, len(n.SSID))
+	}
+}

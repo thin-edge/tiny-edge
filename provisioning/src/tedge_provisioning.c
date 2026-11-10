@@ -194,8 +194,11 @@ static void device_info(const struct rpc_out *out)
 		id[0] = '\0';
 	}
 	result_start(&r, IMPROV_CMD_DEVICE_INFO);
-	result_add(&r, tedge_port_firmware_name());
-	result_add(&r, tedge_port_firmware_version());
+	result_add(&r, (hooks != NULL && hooks->firmware_name != NULL)
+			       ? hooks->firmware_name : tedge_port_firmware_name());
+	result_add(&r, (hooks != NULL && hooks->firmware_version != NULL)
+			       ? hooks->firmware_version
+			       : tedge_port_firmware_version());
 	result_add(&r, (hooks != NULL && hooks->chip != NULL) ? hooks->chip
 							      : "unknown");
 	result_add(&r, id);
