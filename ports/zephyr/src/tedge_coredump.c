@@ -33,7 +33,7 @@ LOG_MODULE_DECLARE(tedge, CONFIG_TEDGE_LOG_LEVEL);
  * line lengths the parser and a log viewer handle. */
 #define PER_LINE   32
 /* "#CD:" + two characters a byte + a newline and its terminator. */
-#define DUMP_LINE_MAX   (4 + PER_LINE * 2 + 2)
+#define DUMP_LINE_MAX   (sizeof(PREFIX) - 1 + PER_LINE * 2 + 1)
 
 static bool have_dump;
 
@@ -55,6 +55,7 @@ static int stored_size(size_t *size)
 static int dump_reader(const struct tedge_log_request *req,
 		       tedge_write_fn write, void *ctx, void *user_data)
 {
+	static const char hex[] = "0123456789abcdef";
 	uint8_t raw[PER_LINE];
 	char line[DUMP_LINE_MAX];
 	size_t size = 0;
@@ -82,12 +83,15 @@ static int dump_reader(const struct tedge_log_request *req,
 		if (coredump_cmd(COREDUMP_CMD_COPY_STORED_DUMP, &arg) < 0) {
 			return -EIO;
 		}
-		n = snprintf(line, sizeof(line), PREFIX);
+		/* "#CD:" + two hex digits per byte + "\n": sized exactly, and
+		 * written byte by byte, since it is not a C string. */
+		memcpy(line, PREFIX, sizeof(PREFIX) - 1);
+		n = sizeof(PREFIX) - 1;
 		for (size_t i = 0; i < arg.length; i++) {
-			n += snprintf(line + n, sizeof(line) - n, "%02x",
-				      raw[i]);
+			line[n++] = hex[raw[i] >> 4];
+			line[n++] = hex[raw[i] & 0x0f];
 		}
-		n += snprintf(line + n, sizeof(line) - n, "\n");
+		line[n++] = '\n';
 		ret = write(ctx, line, n);
 		if (ret != 0) {
 			return ret;

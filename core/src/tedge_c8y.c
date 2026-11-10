@@ -707,33 +707,34 @@ static int subscribe_one(const char *topic)
 /* The operations this image can actually run. */
 static void publish_supported_ops(void)
 {
-	char line[160] = "114";
-	size_t n = strlen(line);
+	char line[160];
+	size_t n = tedge_appendf(line, sizeof(line), 0, "114");
 
 	if (TEDGE_IS_ENABLED(TEDGE_RESTART)) {
-		n += snprintf(line + n, sizeof(line) - n, ",c8y_Restart");
+		n = tedge_appendf(line, sizeof(line), n, ",c8y_Restart");
 	}
 	if (TEDGE_IS_ENABLED(TEDGE_REMOTE_ACCESS)) {
-		n += snprintf(line + n, sizeof(line) - n,
-			      ",c8y_RemoteAccessConnect");
+		n = tedge_appendf(line, sizeof(line), n, ",c8y_RemoteAccessConnect");
 	}
 	if (TEDGE_IS_ENABLED(TEDGE_FIRMWARE_UPDATE)) {
-		n += snprintf(line + n, sizeof(line) - n, ",c8y_Firmware");
+		n = tedge_appendf(line, sizeof(line), n, ",c8y_Firmware");
 	}
 	if (TEDGE_IS_ENABLED(TEDGE_SHELL_COMMAND)) {
-		n += snprintf(line + n, sizeof(line) - n, ",c8y_Command");
+		n = tedge_appendf(line, sizeof(line), n, ",c8y_Command");
 	}
 	if (TEDGE_IS_ENABLED(TEDGE_LOG_UPLOAD)) {
-		n += snprintf(line + n, sizeof(line) - n,
-			      ",c8y_LogfileRequest");
+		n = tedge_appendf(line, sizeof(line), n, ",c8y_LogfileRequest");
 	}
-	for (int i = 0; i < OP_SLOTS && n < sizeof(line); i++) {
+	for (int i = 0; i < OP_SLOTS; i++) {
 		if (ops[i].name != NULL) {
-			n += snprintf(line + n, sizeof(line) - n, ",%s",
-				      ops[i].name);
+			n = tedge_appendf(line, sizeof(line), n, ",%s", ops[i].name);
 		}
 	}
-	if (n > 3) {
+	/* A line cut short would offer half an operation name. */
+	if (n >= sizeof(line)) {
+		TEDGE_LOG_ERR("the supported operations do not fit in one message "
+			      "(%zu bytes)", n);
+	} else if (n > 3) {
 		(void)tedge_c8y_publish_sr(line);
 	}
 

@@ -12,6 +12,7 @@
 #include "tedge_internal.h"
 
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -220,4 +221,21 @@ int tedge_json_next_member(const char *json, size_t *pos, char *key,
 	}
 	*pos = strlen(json);
 	return 0;
+}
+
+size_t tedge_appendf(char *buf, size_t cap, size_t n, const char *fmt, ...)
+{
+	va_list ap;
+	int w;
+
+	va_start(ap, fmt);
+	if (n < cap) {
+		w = vsnprintf(buf + n, cap - n, fmt, ap);
+	} else {
+		/* Already cut short: only count, so the caller still learns
+		 * how long the text would be. */
+		w = vsnprintf(NULL, 0, fmt, ap);
+	}
+	va_end(ap);
+	return (w < 0) ? n : n + (size_t)w;
 }

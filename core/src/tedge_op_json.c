@@ -49,14 +49,13 @@ static void put_field(char *line, size_t len, const char *frag,
 {
 	char raw[200];
 	char quoted[224];
-	size_t n = strlen(line);
 
 	raw[0] = '\0';
 	if (key != NULL) {
 		(void)tedge_json_value(frag, key, raw, sizeof(raw));
 	}
 	(void)tedge_sr_quote(raw, quoted, sizeof(quoted));
-	snprintf(line + n, len - n, ",%s", quoted);
+	(void)tedge_appendf(line, len, strlen(line), ",%s", quoted);
 }
 
 #if defined(TEDGE_PARAMETERS)

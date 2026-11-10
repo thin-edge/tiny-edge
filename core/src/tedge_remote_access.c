@@ -600,20 +600,20 @@ int tedge_ra_twin(char *buf, size_t len)
 		TEDGE_IS_ENABLED(TEDGE_REMOTE_ACCESS_TARGETS_LOCAL)  ? "local"
 		: TEDGE_IS_ENABLED(TEDGE_REMOTE_ACCESS_TARGETS_LIST) ? "list"
 								      : "lan";
-	int n;
+	size_t n;
 
 	for (int i = 0; i < MAX_SESSIONS; i++) {
 		taken += tedge_port_atomic_get(&sessions[i].busy) ? 1 : 0;
 		active += sessions[i].since ? 1 : 0;
 	}
-	n = snprintf(buf, len,
-		     "{\"maxSessions\":%d,\"activeSessions\":%d,"
-		     "\"freeSessions\":%d,\"policy\":\"%s\"",
-		     MAX_SESSIONS, active, MAX_SESSIONS - taken, policy);
+	n = tedge_appendf(buf, len, 0,
+			  "{\"maxSessions\":%d,\"activeSessions\":%d,"
+			  "\"freeSessions\":%d,\"policy\":\"%s\"",
+			  MAX_SESSIONS, active, MAX_SESSIONS - taken, policy);
 
 #if defined(TEDGE_REMOTE_ACCESS_TWIN_SESSIONS)
-	n += snprintf(buf + n, (n < (int)len) ? len - n : 0, ",\"sessions\":[");
-	for (int i = 0, printed = 0; i < MAX_SESSIONS && n < (int)len; i++) {
+	n = tedge_appendf(buf, len, n, ",\"sessions\":[");
+	for (int i = 0, printed = 0; i < MAX_SESSIONS && n < len; i++) {
 		struct tm tm;
 		char iso[24];
 		time_t since = sessions[i].since;
@@ -623,17 +623,13 @@ int tedge_ra_twin(char *buf, size_t len)
 		}
 		gmtime_r(&since, &tm);
 		strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", &tm);
-		n += snprintf(buf + n, len - n,
-			      "%s{\"target\":\"%s:%u\",\"since\":\"%s\"}",
-			      printed++ ? "," : "", sessions[i].host,
-			      sessions[i].port, iso);
+		n = tedge_appendf(buf, len, n,
+				  "%s{\"target\":\"%s:%u\",\"since\":\"%s\"}",
+				  printed++ ? "," : "", sessions[i].host,
+				  sessions[i].port, iso);
 	}
-	if (n < (int)len) {
-		n += snprintf(buf + n, len - n, "]");
-	}
+	n = tedge_appendf(buf, len, n, "]");
 #endif
-	if (n < (int)len) {
-		n += snprintf(buf + n, len - n, "}");
-	}
-	return (n < (int)len) ? 0 : -ENOSPC;
+	n = tedge_appendf(buf, len, n, "}");
+	return (n < len) ? 0 : -ENOSPC;
 }

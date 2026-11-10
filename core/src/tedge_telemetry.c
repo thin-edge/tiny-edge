@@ -182,7 +182,8 @@ uint32_t tedge_telemetry_dropped(void)
 /* "time":"2026-09-20T10:15:00Z", or nothing at all when the clock has not
  * been set yet: a message without a time is better than no message, and the
  * cloud stamps it on arrival. */
-static size_t put_time(char *buf, size_t len, int64_t timestamp_ms)
+/* Appends "time":"<ISO 8601>", at @p n of @p buf (tedge_appendf()). */
+static size_t put_time(char *buf, size_t len, size_t n, int64_t timestamp_ms)
 {
 	struct tm tm;
 	char iso[24];
@@ -192,25 +193,25 @@ static size_t put_time(char *buf, size_t len, int64_t timestamp_ms)
 		secs = (time_t)(timestamp_ms / 1000);
 	} else {
 		if (tedge_port_time_now(&secs) != 0) {
-			return 0;
+			return n;
 		}
 	}
 	gmtime_r(&secs, &tm);
 	strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", &tm);
-	return snprintf(buf, len, "\"time\":\"%s\",", iso);
+	return tedge_appendf(buf, len, n, "\"time\":\"%s\",", iso);
 }
 
 /* Formats a double with two decimals; Zephyr's printf has no floats by
  * default and telemetry should not force them on an application. */
-static size_t put_number(char *buf, size_t len, double v)
+static size_t put_number(char *buf, size_t len, size_t n, double v)
 {
 	long scaled = (long)(v * 100.0 + (v >= 0 ? 0.5 : -0.5));
 	long whole = scaled / 100;
 	long frac = scaled % 100;
 
-	return snprintf(buf, len, "%s%ld.%02ld",
-			(scaled < 0 && whole == 0) ? "-" : "", whole,
-			frac < 0 ? -frac : frac);
+	return tedge_appendf(buf, len, n, "%s%ld.%02ld",
+			     (scaled < 0 && whole == 0) ? "-" : "", whole,
+			     frac < 0 ? -frac : frac);
 }
 
 int tedge_publish_measurement(const char *type,
@@ -226,17 +227,17 @@ int tedge_publish_measurement(const char *type,
 	if (type == NULL || values == NULL || count == 0) {
 		return -EINVAL;
 	}
-	n += snprintf(json + n, sizeof(json) - n, "{");
-	n += put_time(json + n, sizeof(json) - n, timestamp_ms);
+	n = tedge_appendf(json, sizeof(json), n, "{");
+	n = put_time(json, sizeof(json), n, timestamp_ms);
 	for (size_t i = 0; i < count && n < sizeof(json); i++) {
-		n += snprintf(json + n, sizeof(json) - n, "%s\"%s\":",
-			      i ? "," : "", values[i].series);
-		n += put_number(json + n, sizeof(json) - n, values[i].value);
+		n = tedge_appendf(json, sizeof(json), n, "%s\"%s\":",
+				  i ? "," : "", values[i].series);
+		n = put_number(json, sizeof(json), n, values[i].value);
 	}
-	if (n >= sizeof(json) - 2) {
+	n = tedge_appendf(json, sizeof(json), n, "}");
+	if (n >= sizeof(json)) {
 		return -EMSGSIZE;
 	}
-	snprintf(json + n, sizeof(json) - n, "}");
 	return enqueue(TEDGE_MSG_MEASUREMENT, type, json);
 }
 
@@ -254,9 +255,12 @@ int tedge_publish_event(const char *type, const char *text,
 		return -EINVAL;
 	}
 	tedge_json_escape(text, escaped, sizeof(escaped));
-	n += snprintf(json + n, sizeof(json) - n, "{");
-	n += put_time(json + n, sizeof(json) - n, timestamp_ms);
-	snprintf(json + n, sizeof(json) - n, "\"text\":\"%s\"}", escaped);
+	n = tedge_appendf(json, sizeof(json), n, "{");
+	n = put_time(json, sizeof(json), n, timestamp_ms);
+	n = tedge_appendf(json, sizeof(json), n, "\"text\":\"%s\"}", escaped);
+	if (n >= sizeof(json)) {
+		return -EMSGSIZE;
+	}
 	return enqueue(TEDGE_MSG_EVENT, type, json);
 }
 
@@ -288,11 +292,14 @@ int tedge_raise_alarm(const char *type, enum tedge_alarm_severity severity,
 		return -EINVAL;
 	}
 	tedge_json_escape(text, escaped, sizeof(escaped));
-	n += snprintf(json + n, sizeof(json) - n, "{");
-	n += put_time(json + n, sizeof(json) - n, 0);
-	snprintf(json + n, sizeof(json) - n,
-		 "\"severity\":\"%s\",\"text\":\"%s\"}", severity_name(severity),
-		 escaped);
+	n = tedge_appendf(json, sizeof(json), n, "{");
+	n = put_time(json, sizeof(json), n, 0);
+	n = tedge_appendf(json, sizeof(json), n,
+			  "\"severity\":\"%s\",\"text\":\"%s\"}",
+			  severity_name(severity), escaped);
+	if (n >= sizeof(json)) {
+		return -EMSGSIZE;
+	}
 	return enqueue(TEDGE_MSG_ALARM, type, json);
 }
 

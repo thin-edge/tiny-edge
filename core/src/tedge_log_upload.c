@@ -89,14 +89,15 @@ int tedge_register_log_type(const char *type, tedge_log_reader_t reader,
 /* "118,<type>,<type>…": the log types this image can actually produce. */
 size_t tedge_log_types_line(char *out, size_t len)
 {
-	size_t n = snprintf(out, len, "118");
+	size_t n = tedge_appendf(out, len, 0, "118");
 
 	for (int i = 0; i < TYPE_SLOTS && n < len; i++) {
 		if (types[i].type != NULL) {
-			n += snprintf(out + n, len - n, ",%s", types[i].type);
+			n = tedge_appendf(out, len, n, ",%s", types[i].type);
 		}
 	}
-	return (n > 3) ? n : 0;
+	/* A line cut short would name a type that does not exist. */
+	return (n > 3 && n < len) ? n : 0;
 }
 
 /* ------------------------------------------------------------------------ */

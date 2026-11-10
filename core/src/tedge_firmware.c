@@ -95,27 +95,25 @@ static void publish_progress(const char *phase, int percent, int64_t bytes,
 	char json[240];
 	size_t n;
 
-	n = snprintf(json, sizeof(json),
-		     "{\"name\":\"%s\",\"version\":\"%s\",\"phase\":\"%s\"",
-		     job.name, job.version, phase);
-	if (percent >= 0 && n < sizeof(json)) {
-		n += snprintf(json + n, sizeof(json) - n, ",\"percent\":%d",
-			      percent);
+	n = tedge_appendf(json, sizeof(json), 0,
+			  "{\"name\":\"%s\",\"version\":\"%s\",\"phase\":\"%s\"",
+			  job.name, job.version, phase);
+	if (percent >= 0) {
+		n = tedge_appendf(json, sizeof(json), n, ",\"percent\":%d",
+				  percent);
 	}
+	n = tedge_appendf(json, sizeof(json), n, ",\"bytes\":%lld",
+			  (long long)bytes);
+	if (image_total > 0) {
+		n = tedge_appendf(json, sizeof(json), n, ",\"total\":%lld",
+				  (long long)image_total);
+	}
+	if (reason != NULL) {
+		n = tedge_appendf(json, sizeof(json), n, ",\"reason\":\"%s\"",
+				  reason);
+	}
+	n = tedge_appendf(json, sizeof(json), n, "}");
 	if (n < sizeof(json)) {
-		n += snprintf(json + n, sizeof(json) - n, ",\"bytes\":%lld",
-			      (long long)bytes);
-	}
-	if (image_total > 0 && n < sizeof(json)) {
-		n += snprintf(json + n, sizeof(json) - n, ",\"total\":%lld",
-			      (long long)image_total);
-	}
-	if (reason != NULL && n < sizeof(json)) {
-		n += snprintf(json + n, sizeof(json) - n, ",\"reason\":\"%s\"",
-			      reason);
-	}
-	if (n < sizeof(json)) {
-		(void)snprintf(json + n, sizeof(json) - n, "}");
 		/* At most once: progress is a hint, not state, and it must not
 		 * queue up behind device management. */
 		(void)tedge_c8y_publish_progress("firmware", json);
