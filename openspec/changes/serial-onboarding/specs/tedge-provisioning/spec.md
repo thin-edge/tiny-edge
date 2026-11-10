@@ -82,6 +82,28 @@ Wi-Fi credentials itself. It SHALL judge success by the network coming up
 - **THEN** the application joins the network and stores the credentials in
   its own way, and the library reports "provisioned" when the network is up
 
+### Requirement: The Zephyr port provides default hooks
+
+The Zephyr port SHALL provide `tedge_provisioning_zephyr_init()`, which
+starts the library with the port's hooks: Wi-Fi through Zephyr's Wi-Fi
+credentials store, the scan, identify on the devicetree's `led0` or
+`led-strip`, and `CONFIG_SOC` as the chip. Each hook the application passes
+SHALL replace the port's. The port's Wi-Fi hook SHALL store a network only
+once the device has an address on it, and SHALL rejoin the previously
+stored network when the new one cannot be joined.
+
+#### Scenario: Application with its own network management
+
+- **WHEN** an application passes its own Wi-Fi hook to
+  `tedge_provisioning_zephyr_init()`
+- **THEN** the library uses that hook, and the port's scan, identify and
+  chip
+
+#### Scenario: Wrong password with a network already stored
+
+- **WHEN** the port's Wi-Fi hook cannot join the new network
+- **THEN** the stored network is unchanged, and the device joins it again
+
 ### Requirement: The tiny-edge info command reports what onboarding needs
 
 The library SHALL answer a tiny-edge info command (0xE0) with the

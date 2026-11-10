@@ -635,6 +635,42 @@ DNS from DHCP or runs the mDNS responder
 It needs nothing from the application beyond UDP; each lookup holds one
 socket while it runs.
 
+### Setting a device up over USB (tedge-onboard)
+
+With `CONFIG_TEDGE_PROVISIONING=y`, a device can be set up from a computer
+it is plugged into: [`tedge-onboard`](../../tools/onboard/README.md) gives it
+a Wi-Fi network, registers it in Cumulocity, and passes it the tenant and a
+one-time password. The library (`include/tedge/provisioning.h`) answers the
+Improv Wi-Fi protocol on the console; with the shell on the console
+(`CONFIG_SHELL_BACKEND_SERIAL`) the tool borrows it with `tedge improv`,
+otherwise the console speaks Improv from boot.
+
+Start it after `tedge_init()`, with the port's ready-made hooks:
+
+```c
+#include <tedge/provisioning_zephyr.h>
+
+tedge_init(NULL, &hooks);
+tedge_provisioning_zephyr_init(NULL);
+tedge_start();
+```
+
+| Hook | The port's default |
+|---|---|
+| Wi-Fi | Joins the network, keeps it in Zephyr's Wi-Fi credentials store (`CONFIG_WIFI_CREDENTIALS`) only once the device has an address, and goes back to the previous network otherwise |
+| Scan | The networks the first Wi-Fi interface sees |
+| Identify | Blinks the devicetree's `led0`, or the first pixel of its `led-strip` |
+| Chip | `CONFIG_SOC` |
+
+An application that manages its network itself (its own reconnect logic),
+or has a better light, passes the hooks it wants to replace:
+`tedge_provisioning_zephyr_init(&mine)`. Joining a stored network at boot
+stays the application's: the minimal sample does it with
+`NET_REQUEST_WIFI_CONNECT_STORED` (`samples/minimal/overlay-onboarding.conf`).
+
+The library adds about 5 KB of flash and 5 KB of RAM (4 KB of it the
+worker's stack).
+
 ### Security limitations
 
 - The device key is stored in PSA ITS, encrypted with a key derived from the
