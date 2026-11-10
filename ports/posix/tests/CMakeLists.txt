@@ -6,3 +6,23 @@ target_compile_definitions(tedge-port-test PRIVATE _POSIX_C_SOURCE=200809L
   _DEFAULT_SOURCE _DARWIN_C_SOURCE)
 target_link_libraries(tedge-port-test PRIVATE tedge::tedge)
 add_test(NAME port COMMAND tedge-port-test)
+
+# Stopping the client while it waits to enroll: certificate builds only
+# (bootstrap builds have no enrollment, and no one-time password to set).
+if(TEDGE_AUTH_C8Y_CA)
+  add_executable(tedge-lifecycle-test test_lifecycle.c)
+  set_target_properties(tedge-lifecycle-test PROPERTIES C_STANDARD 11)
+  target_compile_definitions(tedge-lifecycle-test PRIVATE
+    _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE _DARWIN_C_SOURCE)
+  target_link_libraries(tedge-lifecycle-test PRIVATE tedge::tedge)
+  add_test(NAME lifecycle COMMAND tedge-lifecycle-test)
+endif()
+
+if(TEDGE_PROVISIONING)
+  add_executable(tedge-provisioning-test test_provisioning.c)
+  set_target_properties(tedge-provisioning-test PROPERTIES C_STANDARD 11)
+  target_compile_definitions(tedge-provisioning-test PRIVATE
+    _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE _DARWIN_C_SOURCE)
+  target_link_libraries(tedge-provisioning-test PRIVATE tedge::tedge)
+  add_test(NAME provisioning COMMAND tedge-provisioning-test)
+endif()

@@ -156,11 +156,36 @@ int tedge_init(const struct tedge_identity *identity,
  */
 int tedge_start(void);
 
-/** @brief Disconnect and stop the client thread. */
+/**
+ * @brief Disconnect and stop the client thread.
+ *
+ * Waits up to 10 seconds for the thread to end. The client can then be
+ * given new settings (tedge_set_c8y_url(), tedge_set_enroll_otp()) and
+ * started again with tedge_start().
+ *
+ * @return 0; -EALREADY when the client is not running; -EBUSY when the
+ *         thread did not end in time (call again later).
+ */
 int tedge_stop(void);
 
 /** @brief Current state. */
 enum tedge_state tedge_get_state(void);
+
+/**
+ * @brief The device's external ID in Cumulocity, as tedge_init() settled it.
+ *
+ * @return Its length; -EPERM before tedge_init(); -ENOSPC when @p len is too
+ *         small.
+ */
+int tedge_get_device_id(char *buf, size_t len);
+
+/**
+ * @brief The Cumulocity tenant host the client uses: the one set with
+ *        tedge_set_c8y_url(), else TEDGE_C8Y_URL. Empty when neither is set.
+ *
+ * @return Its length; -ENOSPC when @p len is too small.
+ */
+int tedge_get_c8y_url(char *buf, size_t len);
 
 /* ------------------------------------------------------------------------ */
 /* Onboarding (TEDGE_AUTH_C8Y_CA)                                     */

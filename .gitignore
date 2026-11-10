@@ -11,7 +11,8 @@ build*.log
 # /zephyr/: that directory holds this repository's module.yml.
 /modules/
 /bootloader/
-/tools/
+/tools/*
+!/tools/onboard/
 /.west/
 
 # Local overlays and credentials: never commit secrets.

@@ -34,9 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Every feature the port has
+      - name: Every feature the port has, and the provisioning library
         run: |
-          cmake -S ports/posix -B build -DTEDGE_WERROR=ON
+          cmake -S ports/posix -B build -DTEDGE_WERROR=ON -DTEDGE_PROVISIONING=ON
           cmake --build build -j4
           ctest --test-dir build --output-on-failure
 

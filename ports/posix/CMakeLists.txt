@@ -32,13 +32,16 @@ option(TEDGE_POSIX_TESTS "Build the port's tests (ctest)" ${_top})
 include(cmake/options.cmake)
 include(cmake/mbedtls.cmake)
 include(${TEDGE_ROOT}/core/sources.cmake)
+include(${TEDGE_ROOT}/provisioning/sources.cmake)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 tedge_core_sources(_core_sources "")
+tedge_provisioning_sources(_provisioning_sources "")
 add_library(tedge STATIC
   ${_core_sources}
+  ${_provisioning_sources}
   src/tedge_posix.c
   src/tedge_port_os.c
   src/tedge_port_log.c

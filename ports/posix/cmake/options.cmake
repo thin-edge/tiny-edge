@@ -147,6 +147,14 @@ tedge_option(TEDGE_REMOTE_ACCESS_RESOLVE_RETRY_DELAY_MS INT 500 "Pause between l
 
 tedge_option(TEDGE_HTTP_MAX_REDIRECTS INT 3 "HTTP redirects to follow")
 
+# The provisioning library (include/tedge/provisioning.h), beside the client.
+tedge_option(TEDGE_PROVISIONING BOOL OFF "Setting the device up over Improv (provisioning library)")
+tedge_option(TEDGE_PROVISIONING_SERIAL BOOL ON "Improv Serial, fed by the application")
+tedge_option(TEDGE_PROVISIONING_STACK_SIZE INT 4096 "Stack of the provisioning worker (unused on POSIX)")
+if(NOT TEDGE_PROVISIONING)
+  set(TEDGE_PROVISIONING_SERIAL OFF)
+endif()
+
 # Not in this port yet: each needs a POSIX design of its own (an image
 # format and a launcher that can roll back; a command runner; crash dumps).
 foreach(_missing TEDGE_FIRMWARE_UPDATE TEDGE_SHELL_COMMAND TEDGE_COREDUMP)
