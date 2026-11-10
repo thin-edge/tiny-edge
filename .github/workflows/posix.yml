@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The POSIX port: built with every compiler and C library it supports, its
+# tests run, and the options that switch features off built too.
+name: posix
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux, GCC
+            os: ubuntu-latest
+            cc: gcc
+          - name: Linux, Clang
+            os: ubuntu-latest
+            cc: clang
+          - name: macOS, Clang
+            os: macos-latest
+            cc: clang
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every feature the port has
+        run: |
+          cmake -S ports/posix -B build -DTEDGE_WERROR=ON
+          cmake --build build -j4
+          ctest --test-dir build --output-on-failure
+
+      # The features off, and the other authentication: what the core
+      # leaves out (tedge_absent.c) must still link.
+      - name: Bootstrap authentication, telemetry only
+        run: |
+          cmake -S ports/posix -B build-small -DTEDGE_WERROR=ON \
+            -DTEDGE_AUTH=bootstrap -DTEDGE_C8Y_MQTT=core \
+            -DTEDGE_HEALTH=OFF -DTEDGE_RESTART=OFF -DTEDGE_LOG_UPLOAD=OFF \
+            -DTEDGE_PARAMETERS=OFF -DTEDGE_CERT_RENEWAL=OFF \
+            -DTEDGE_REMOTE_ACCESS=OFF -DTEDGE_C8Y_OPERATION_JSON=OFF \
+            -DFETCHCONTENT_BASE_DIR=$PWD/build/_deps
+          cmake --build build-small -j4
+          ctest --test-dir build-small --output-on-failure

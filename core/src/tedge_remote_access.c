@@ -486,6 +486,18 @@ static void bridge(void *arg)
 			}
 		}
 		poll_ms = moved ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+		/* A side that hung up with data still to read is not done:
+		 * the data is relayed first, and the read that finds nothing
+		 * left ends the session ("the target closed"). macOS reports
+		 * the hang-up while the data is still queued, so a target
+		 * that writes a large reply and closes at once lost all but
+		 * the first buffer of it. */
+		if (fds[0].revents & TEDGE_PORT_POLLIN) {
+			fds[0].revents &= ~(TEDGE_PORT_POLLHUP | TEDGE_PORT_POLLERR);
+		}
+		if (fds[1].revents & TEDGE_PORT_POLLIN) {
+			fds[1].revents &= ~(TEDGE_PORT_POLLHUP | TEDGE_PORT_POLLERR);
+		}
 		if ((fds[0].revents | fds[1].revents) &
 		    (TEDGE_PORT_POLLHUP | TEDGE_PORT_POLLERR)) {
 			why = (fds[0].revents &

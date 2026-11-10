@@ -10,8 +10,11 @@
  * - Zephyr generates it from Kconfig, without the CONFIG_ prefix: the
  *   Kconfig option TEDGE_HEALTH is TEDGE_HEALTH to the core
  *   (ports/zephyr/cmake/tedge_config.cmake).
- * - Other ports have the application write a tedge_user_config.h, in the
- *   style of FreeRTOSConfig.h and tx_user.h.
+ * - The POSIX port generates it from CMake options of the same names
+ *   (ports/posix/cmake/options.cmake).
+ * - Ports without a configuration system of their own will have the
+ *   application write a tedge_user_config.h, in the style of
+ *   FreeRTOSConfig.h and tx_user.h.
  *
  * A feature that is off is not defined at all; one that is on is defined
  * to 1. A value (a size, an interval, a string) is defined to that value.
