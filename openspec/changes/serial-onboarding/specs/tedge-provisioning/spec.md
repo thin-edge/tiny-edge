@@ -52,6 +52,22 @@ the device name.
 - **THEN** the library answers with the firmware name, firmware version,
   chip, and the device's external ID
 
+### Requirement: The board reports the networks it can see
+
+The library SHALL answer Improv's "request scanned Wi-Fi networks" command
+(0x04) through the application's scan hook: one RPC result per network,
+carrying the SSID, the signal strength in dBm and whether it needs a
+password, strongest first, each SSID once and without hidden networks,
+followed by a result with no strings. Without the hook, it SHALL answer
+with the "unknown RPC" error.
+
+#### Scenario: Two access points of one network
+
+- **WHEN** the scan finds the same SSID on two access points and a hidden
+  network
+- **THEN** the SSID is reported once, with the stronger signal, and the
+  hidden network is not reported
+
 ### Requirement: Joining Wi-Fi stays the application's job
 
 The library SHALL hand Wi-Fi settings to the application through a hook

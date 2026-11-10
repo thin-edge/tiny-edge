@@ -193,9 +193,27 @@ static void identify(void *ctx)
 	identified++;
 }
 
+static int wifi_scan(struct tedge_provisioning_network *out, size_t max,
+		     void *ctx)
+{
+	static const struct tedge_provisioning_network nets[] = {
+		{ "weak-net", -80, true },
+		{ "lab-net", -55, true },
+		{ "", -40, false },        /* hidden: not reported */
+		{ "lab-net", -70, true },  /* a second access point */
+		{ "open-cafe", -65, false },
+	};
+	size_t n = sizeof(nets) / sizeof(nets[0]);
+
+	(void)ctx;
+	memcpy(out, nets, (n < max ? n : max) * sizeof(nets[0]));
+	return (int)n;
+}
+
 static const struct tedge_provisioning_hooks hooks = {
 	.wifi_connect = wifi_connect,
 	.identify = identify,
+	.wifi_scan = wifi_scan,
 	.chip = "host",
 };
 
@@ -234,6 +252,21 @@ int main(void)
 	CHECK(result_string(&f, 2, s, sizeof(s)) && strcmp(s, "c8y-ca") == 0);
 	CHECK(result_string(&f, 3, s, sizeof(s)) && strcmp(s, "") == 0);
 	CHECK(result_string(&f, 4, s, sizeof(s)) && strcmp(s, "stopped") == 0);
+
+	/* The networks the board sees: strongest first, each once, no hidden
+	 * ones, then an empty result. */
+	send_rpc(0x04, NULL, 0);
+	{
+		const char *want[] = { "lab-net", "open-cafe", "weak-net" };
+		const char *secured[] = { "YES", "NO", "YES" };
+
+		for (int i = 0; i < 3; i++) {
+			CHECK(expect(&f) && f.type == 0x04 && f.data[0] == 0x04);
+			CHECK(result_string(&f, 0, s, sizeof(s)) && strcmp(s, want[i]) == 0);
+			CHECK(result_string(&f, 2, s, sizeof(s)) && strcmp(s, secured[i]) == 0);
+		}
+			CHECK(expect(&f) && f.type == 0x04 && f.data[0] == 0x04 && f.data[1] == 0);
+	}
 
 	/* A command nobody knows. */
 	send_rpc(0x7F, NULL, 0);

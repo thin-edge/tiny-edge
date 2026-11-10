@@ -25,6 +25,7 @@
 #define IMPROV_CMD_WIFI_SETTINGS  0x01
 #define IMPROV_CMD_CURRENT_STATE  0x02 /* serial; "identify" on BLE */
 #define IMPROV_CMD_DEVICE_INFO    0x03
+#define IMPROV_CMD_WIFI_NETWORKS  0x04
 
 /* An RPC packet as the transports hand it over: [command][length][data].
  * The largest the library accepts: the onboard command with a 64-byte host

@@ -74,9 +74,13 @@ the user cancels. `--port` SHALL remain available for scripts.
 
 ### Requirement: Wi-Fi is taken from the computer, with consent
 
-The tool SHALL propose the Wi-Fi network the computer is connected to, and
-SHALL let the user choose another from the networks the computer knows or
-type one. It SHALL take the password from the operating system's credential
+The tool SHALL ask the board which networks it can see, and SHALL offer
+those, strongest first, marking the network the computer is connected to
+and the networks the computer knows. When the operating system hides the
+current network's name, the tool SHALL preselect the strongest network the
+board sees that the computer knows, which is almost always the current
+one. The user SHALL be able to type another network's name. When the board
+cannot scan, the tool SHALL offer the networks the computer knows. It SHALL take the password from the operating system's credential
 store (the macOS Keychain, NetworkManager, or the Windows WLAN profiles),
 which may ask the user to allow it. When the password is not available, it
 SHALL ask for it with hidden input. It SHALL NOT print or log the password.

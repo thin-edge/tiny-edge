@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 
 TEDGE_LOG_DECLARE();
@@ -201,6 +202,66 @@ static void device_info(const struct rpc_out *out)
 	result_send(&r, out);
 }
 
+/* The most networks one scan reports. */
+#define SCAN_MAX 16
+
+/* Improv's scan answer: one result per network, [SSID, RSSI, "YES" or "NO"
+ * for a password], strongest first and each SSID once, then a result with
+ * no strings to end the list. */
+static void wifi_networks(const struct rpc_out *out)
+{
+	static struct tedge_provisioning_network found[SCAN_MAX];
+	struct result r;
+	int n;
+
+	if (hooks == NULL || hooks->wifi_scan == NULL) {
+		out->error(IMPROV_ERR_UNKNOWN_RPC);
+		return;
+	}
+	n = hooks->wifi_scan(found, SCAN_MAX, hooks->ctx);
+	if (n < 0) {
+		TEDGE_LOG_WRN("provisioning: Wi-Fi scan failed (%d)", n);
+		out->error(IMPROV_ERR_UNKNOWN);
+		return;
+	}
+	if (n > SCAN_MAX) {
+		n = SCAN_MAX;
+	}
+	/* Strongest first (a few entries: insertion sort). */
+	for (int i = 1; i < n; i++) {
+		struct tedge_provisioning_network t = found[i];
+		int j = i - 1;
+
+		while (j >= 0 && found[j].rssi < t.rssi) {
+			found[j + 1] = found[j];
+			j--;
+		}
+		found[j + 1] = t;
+	}
+	for (int i = 0; i < n; i++) {
+		char rssi[8];
+		bool seen = false;
+
+		found[i].ssid[sizeof(found[i].ssid) - 1] = '\0';
+		if (found[i].ssid[0] == '\0') {
+			continue; /* hidden network */
+		}
+		for (int j = 0; j < i && !seen; j++) {
+			seen = strcmp(found[j].ssid, found[i].ssid) == 0;
+		}
+		if (seen) {
+			continue; /* another access point of a network already sent */
+		}
+		snprintf(rssi, sizeof(rssi), "%d", found[i].rssi);
+		result_start(&r, IMPROV_CMD_WIFI_NETWORKS);
+		result_add(&r, found[i].ssid);
+		result_add(&r, rssi);
+		result_add(&r, found[i].secured ? "YES" : "NO");
+		result_send(&r, out);
+	}
+	send_empty_result(IMPROV_CMD_WIFI_NETWORKS, out);
+}
+
 /* --- tiny-edge's commands ------------------------------------------------ */
 
 static const char *state_name(enum tedge_state state)
@@ -338,6 +399,9 @@ static void handle(const uint8_t *pkt, size_t n, const struct rpc_out *out)
 		break;
 	case IMPROV_CMD_DEVICE_INFO:
 		device_info(out);
+		break;
+	case IMPROV_CMD_WIFI_NETWORKS:
+		wifi_networks(out);
 		break;
 	case TEDGE_PROVISIONING_CMD_INFO:
 		info(out);

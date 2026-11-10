@@ -45,6 +45,13 @@ extern "C" {
  *  is connected (it gets a new certificate). */
 #define TEDGE_PROVISIONING_FLAG_REONBOARD 0x01
 
+/** A Wi-Fi network the board can see (tedge_provisioning_hooks::wifi_scan). */
+struct tedge_provisioning_network {
+	char ssid[33];
+	int8_t rssi;   /**< dBm */
+	bool secured;  /**< needs a password */
+};
+
 /** What the application provides. Every member may be NULL. */
 struct tedge_provisioning_hooks {
 	/**
@@ -60,6 +67,17 @@ struct tedge_provisioning_hooks {
 	/** Make this board recognisable for about 10 s (blink an LED, say).
 	 *  The library also logs a line naming the device. */
 	void (*identify)(void *ctx);
+
+	/**
+	 * Scan for Wi-Fi networks, filling up to @p max entries of @p out.
+	 * Block until the scan is done, for 15 s at most. A tool uses it to
+	 * offer the networks the board can actually reach. Without it, the
+	 * scan request is answered "unknown RPC".
+	 *
+	 * @return The number of networks found, or a negative errno.
+	 */
+	int (*wifi_scan)(struct tedge_provisioning_network *out, size_t max,
+			 void *ctx);
 
 	/** The chip or board, for Improv's device info ("ESP32-S3"). NULL
 	 *  reports "unknown". */
