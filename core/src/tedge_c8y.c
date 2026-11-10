@@ -241,6 +241,7 @@ static void op_finished_lines(const char *name, bool ok, const char *text)
 }
 #endif
 
+#if defined(TEDGE_RESTART) || defined(TEDGE_FIRMWARE_UPDATE)
 /* Completes an operation whose id was kept across a reboot. */
 static void op_finish_by_id(const char *id, const char *name, bool ok,
 			    const char *text)
@@ -257,6 +258,7 @@ static void op_finish_by_id(const char *id, const char *name, bool ok,
 	}
 	snprintf(current_op_id, sizeof(current_op_id), "%s", saved);
 }
+#endif
 
 int tedge_register_operation(const char *name, tedge_operation_handler_t handler,
 			     void *user_data)
