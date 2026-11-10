@@ -376,37 +376,44 @@ func (f *flow) chooseWiFi(b *device.Board) (ssid, password string, err error) {
 		}
 		ssid = current
 	}
+	var scanned []improv.Network
 	if ssid == "" {
-		current, haveCurrent := f.wifi.Current()
-		var opts []ui.Option
-		if haveCurrent {
-			opts = append(opts, ui.Option{Label: current + " (this computer's network)", Value: current})
-		}
-		for _, k := range f.wifi.Known() {
-			if k != current {
-				opts = append(opts, ui.Option{Label: k, Value: k})
+		scanOK := false
+		_ = f.u.Step("Asking the board which Wi-Fi networks it can see", func(ctx context.Context) (string, error) {
+			nets, err := b.Client.ScanNetworks(ctx)
+			if err != nil {
+				// Older firmware cannot scan: offer this computer's
+				// networks instead, without failing the step.
+				return "The board cannot list networks; showing this computer's", nil
 			}
-		}
-		opts = append(opts, ui.Option{Label: "Another network (type its name)", Value: "\x00other"})
+			scanned, scanOK = nets, true
+			return fmt.Sprintf("The board sees %d Wi-Fi networks", len(nets)), nil
+		})
+		current, _ := f.wifi.Current()
+		opts := wifiOptions(scanned, scanOK, current, f.wifi.Known())
+		opts = append(opts, ui.Option{Label: "Another network (type its name)", Value: choiceOther})
 		if b.Info.State == "connected" || b.Info.State == "awaiting-registration" ||
 			b.Info.State == "connecting" {
-			opts = append(opts, ui.Option{Label: "Keep the board's current Wi-Fi", Value: "\x00keep"})
+			opts = append(opts, ui.Option{Label: "Keep the board's current Wi-Fi", Value: choiceKeep})
 		}
 		ssid, err = f.u.Choose("Which Wi-Fi network should the board use?",
-			"It needs to reach the internet. Most boards use 2.4 GHz networks only.", opts, "")
+			"The board needs a network that reaches the internet.", opts, "")
 		if err != nil {
 			return "", "", err
 		}
 		switch ssid {
-		case "\x00keep":
+		case choiceKeep:
 			return "", "", nil
-		case "\x00other":
+		case choiceOther:
 			if ssid, err = f.u.Input("Wi-Fi network name", "", "", ""); err != nil {
 				return "", "", err
 			}
 		}
 	}
 
+	if openNetwork(scanned, ssid) {
+		return ssid, "", nil
+	}
 	if f.o.wifiPassword {
 		pw, err := io.ReadAll(os.Stdin)
 		if err != nil {

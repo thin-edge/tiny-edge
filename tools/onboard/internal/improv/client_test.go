@@ -82,3 +82,18 @@ func TestNoAnswer(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestScanNetworks(t *testing.T) {
+	c := newFake(t, func(cmd byte, _ []byte) [][]byte {
+		return [][]byte{
+			result(cmd, "lab-net", "-52", "YES"),
+			result(cmd, "cafe", "-77", "NO"),
+			result(cmd),
+		}
+	})
+	nets, err := c.ScanNetworks(context.Background())
+	if err != nil || len(nets) != 2 || nets[0].SSID != "lab-net" || nets[0].RSSI != -52 ||
+		!nets[0].Secured || nets[1].Secured {
+		t.Fatalf("%+v %v", nets, err)
+	}
+}

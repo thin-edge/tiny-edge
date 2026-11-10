@@ -35,6 +35,7 @@ const (
 	CmdWiFiSettings  = 0x01
 	CmdCurrentState  = 0x02
 	CmdDeviceInfo    = 0x03
+	CmdWiFiNetworks  = 0x04
 	CmdTedgeInfo     = 0xE0
 	CmdTedgeOnboard  = 0xE1
 	CmdTedgeIdentify = 0xE2

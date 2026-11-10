@@ -235,3 +235,52 @@ func cleanLine(l string) string {
 	}
 	return strings.TrimSpace(strings.TrimPrefix(l, "uart:~$"))
 }
+
+// Network is a Wi-Fi network the device can see.
+type Network struct {
+	SSID    string
+	RSSI    int // dBm
+	Secured bool
+}
+
+// ScanNetworks asks the device which Wi-Fi networks it can see: one result
+// per network, strongest first, ended by an empty result.
+func (c *Client) ScanNetworks(ctx context.Context) ([]Network, error) {
+	c.drain()
+	if _, err := c.rw.Write(Encode(RPC(CmdWiFiNetworks, nil))); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	var nets []Network
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ErrNoAnswer
+		case f, ok := <-c.frames:
+			if !ok {
+				return nil, io.ErrUnexpectedEOF
+			}
+			switch f.Type {
+			case TypeError:
+				if len(f.Data) == 1 && f.Data[0] != ErrNone {
+					return nil, &DeviceError{Code: f.Data[0]}
+				}
+			case TypeResult:
+				cmd, strs, ok := ParseResult(f.Data)
+				if !ok || cmd != CmdWiFiNetworks {
+					continue
+				}
+				if len(strs) == 0 {
+					return nets, nil
+				}
+				n := Network{SSID: strs[0]}
+				if len(strs) > 1 {
+					n.RSSI, _ = strconv.Atoi(strs[1])
+				}
+				n.Secured = len(strs) < 3 || strs[2] == "YES"
+				nets = append(nets, n)
+			}
+		}
+	}
+}
