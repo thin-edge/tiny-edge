@@ -12,6 +12,7 @@
 - [x] 2.5 Improv Serial framing: a byte-at-a-time parser that skips non-frame bytes, and a frame writer that hands one whole frame to the transport
 - [x] 2.6 Host unit tests of the parser and the RPC layer (a C test in the POSIX port's tests, built by CMake and run in CI): every command, corrupted and split frames, log bytes between frames, oversized strings
 - [x] 2.7 Extend `scripts/check-portability.py` to apply the core rules to `provisioning/`, and `tests/host-compile/run.sh` to compile it
+- [x] 2.8 Improv's network scan (0x04) through an application hook, with a ready-made Zephyr hook, so the tool can offer the networks the board sees and find the computer's network when the OS hides its name
 
 ## 3. Zephyr glue
 
@@ -41,7 +42,7 @@
 
 ## 6. End-to-end verification
 
-- [ ] 6.1 Flash the Zephyr sample with the onboarding overlay to the ESP32-S3-DevKitC on this computer, run `tedge-onboard`, and confirm the device joins Wi-Fi, enrolls, and connects in Cumulocity
+- [x] 6.1 Flash the Zephyr sample with the onboarding overlay to the ESP32-S3-DevKitC on this computer, run `tedge-onboard`, and confirm the device joins Wi-Fi, enrolls, and connects in Cumulocity
 - [ ] 6.2 Run it again without `--reonboard` (refused), and with it (new certificate)
 - [ ] 6.3 Check that ESP Web Tools or another standard Improv Serial client can at least set Wi-Fi on a shell-less build
 - [ ] 6.4 Remove the test device from the tenant
