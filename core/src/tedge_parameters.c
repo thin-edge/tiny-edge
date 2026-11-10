@@ -200,14 +200,13 @@ static int check_value(const struct tedge_parameter *p, const char *raw,
 		return 0;
 	case TEDGE_PARAM_TYPE_ENUM:
 		if (!enum_allows(p, raw)) {
-			size_t n = snprintf(reason, reason_len,
-					    "%s: '%s' is not one of", p->name,
-					    raw);
+			size_t n = tedge_appendf(reason, reason_len, 0,
+						 "%s: '%s' is not one of",
+						 p->name, raw);
 
 			for (const char *const *a = p->allowed;
 			     a != NULL && *a != NULL && n < reason_len; a++) {
-				n += snprintf(reason + n, reason_len - n, " %s",
-					      *a);
+				n = tedge_appendf(reason, reason_len, n, " %s", *a);
 			}
 			return -EINVAL;
 		}
@@ -361,37 +360,45 @@ static void publish(const struct param_set *set)
 		TEDGE_LOG_ERR("params: %s: no heap for the twin fragment", set->name);
 		return;
 	}
-	n = snprintf(json, size, "{");
-	for (size_t i = 0; i < set->count; i++) {
+	/* twin_size() makes room for every value, so nothing is cut short;
+	 * tedge_appendf() makes sure of it all the same. */
+	n = tedge_appendf(json, size, 0, "{");
+	for (size_t i = 0; i < set->count && n < size; i++) {
 		const struct tedge_parameter *p = &set->params[i];
 		const struct param_value *v = value_of(set, i);
 
-		n += snprintf(json + n, size - n, "%s\"%s\":", i ? "," : "",
-			      p->name);
+		n = tedge_appendf(json, size, n, "%s\"%s\":", i ? "," : "",
+				  p->name);
 		switch (p->type) {
 		case TEDGE_PARAM_TYPE_BOOL:
-			n += snprintf(json + n, size - n, "%s",
-				      v->v.b ? "true" : "false");
+			n = tedge_appendf(json, size, n, "%s",
+					  v->v.b ? "true" : "false");
 			break;
 		case TEDGE_PARAM_TYPE_INT:
-			n += snprintf(json + n, size - n, "%d", v->v.i);
+			n = tedge_appendf(json, size, n, "%d", v->v.i);
 			break;
 		case TEDGE_PARAM_TYPE_STRING:
-		case TEDGE_PARAM_TYPE_ENUM: {
-			char *escaped = json + n + 1;
-			size_t room = size - n - 3;
-
+		case TEDGE_PARAM_TYPE_ENUM:
+			/* The opening quote, the escaped value, the closing
+			 * quote, and room for the "}" and the NUL. */
+			if (n + 4 > size) {
+				n = size;
+				break;
+			}
 			json[n++] = '"';
-			tedge_json_escape(v->v.s != NULL ? v->v.s : "", escaped,
-					  room);
-			n += strlen(escaped);
-			n += snprintf(json + n, size - n, "\"");
+			tedge_json_escape(v->v.s != NULL ? v->v.s : "", json + n,
+					  size - n - 2);
+			n += strlen(json + n);
+			n = tedge_appendf(json, size, n, "\"");
 			break;
 		}
-		}
 	}
-	(void)snprintf(json + n, size - n, "}");
-	(void)tedge_publish_twin(set->name, json);
+	n = tedge_appendf(json, size, n, "}");
+	if (n < size) {
+		(void)tedge_publish_twin(set->name, json);
+	} else {
+		TEDGE_LOG_ERR("params: %s: the twin fragment did not fit", set->name);
+	}
 	tedge_free(json);
 }
 
@@ -558,16 +565,9 @@ int tedge_declare_parameters(const char *set_name,
 /* them.                                                                     */
 /* ------------------------------------------------------------------------ */
 
-/* snprintf() reports what it *would* have written, so n can run past the
- * buffer; every caller below stops as soon as it does. */
-#define APPEND(...)                                                            \
-	do {                                                                   \
-		if (n < len) {                                                 \
-			n += snprintf(out + n, len - n, __VA_ARGS__);           \
-		} else {                                                       \
-			n += snprintf(NULL, 0, __VA_ARGS__);                   \
-		}                                                              \
-	} while (0)
+/* n counts what the text would take, so it can run past the buffer; every
+ * caller below stops as soon as it does. */
+#define APPEND(...) (n = tedge_appendf(out, len, n, __VA_ARGS__))
 
 /* A JSON string, escaped straight into the output one character at a
  * time: descriptions are as long as their author made them, and the only

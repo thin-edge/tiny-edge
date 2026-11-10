@@ -390,6 +390,19 @@ void tedge_health_tick(void);
 size_t tedge_heap_free(void);
 /** Copy @p in into @p out with JSON's escapes applied. */
 void tedge_json_escape(const char *in, char *out, size_t len);
+
+/**
+ * Append printf-style text to @p buf (@p cap bytes), whose first @p n bytes
+ * are written. Text is written only while it fits, so the buffer stays
+ * NUL-terminated and is never overrun however often this is called.
+ *
+ * @return The length the text would have without the limit: n plus what
+ *         this call adds. The text was cut short when it is >= @p cap.
+ */
+#if defined(__GNUC__)
+__attribute__((format(printf, 4, 5)))
+#endif
+size_t tedge_appendf(char *buf, size_t cap, size_t n, const char *fmt, ...);
 /** Read a string field out of JSON this module built. Length, or -ENOENT. */
 int tedge_json_field(const char *json, const char *key, char *out, size_t len);
 /** Like tedge_json_field(), but the value may be a number or a keyword. */

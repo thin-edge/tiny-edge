@@ -2527,3 +2527,44 @@ ZTEST(tedge_codec, test_timegm)
 }
 
 ZTEST_SUITE(tedge_codec, NULL, NULL, NULL, NULL, NULL);
+
+/* ------------------------------------------------------------------------ */
+/* tedge_appendf: appending without overrunning                              */
+/* ------------------------------------------------------------------------ */
+
+ZTEST(tedge_appendf, test_fits)
+{
+	char buf[16];
+	size_t n = tedge_appendf(buf, sizeof(buf), 0, "%s", "abc");
+
+	n = tedge_appendf(buf, sizeof(buf), n, "-%d", 42);
+	zassert_equal(n, 6);
+	zassert_str_equal(buf, "abc-42");
+}
+
+ZTEST(tedge_appendf, test_cut_short_stays_terminated)
+{
+	char buf[8];
+	size_t n = tedge_appendf(buf, sizeof(buf), 0, "0123456789");
+
+	/* The length the text would have; the buffer holds what fits. */
+	zassert_equal(n, 10);
+	zassert_str_equal(buf, "0123456");
+	/* Past the end: nothing is written, the would-be length grows. */
+	n = tedge_appendf(buf, sizeof(buf), n, "xyz");
+	zassert_equal(n, 13);
+	zassert_str_equal(buf, "0123456");
+}
+
+ZTEST(tedge_appendf, test_exactly_full)
+{
+	char buf[4];
+	size_t n = tedge_appendf(buf, sizeof(buf), 0, "abc");
+
+	zassert_equal(n, 3); /* fits, with its NUL */
+	n = tedge_appendf(buf, sizeof(buf), n, "d");
+	zassert_true(n >= sizeof(buf));
+	zassert_str_equal(buf, "abc");
+}
+
+ZTEST_SUITE(tedge_appendf, NULL, NULL, NULL, NULL, NULL);

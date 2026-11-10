@@ -127,14 +127,12 @@ int tedge_shell_help_text(const char *list, char *buf, size_t len)
 		}
 		if (elen > 0) {
 			if (count == 0) {
-				n += snprintf(buf + n, len - n, "%s",
-					      "Commands this device runs "
-					      "(arguments may follow):");
+				n = tedge_appendf(buf, len, n, "%s",
+						  "Commands this device runs "
+						  "(arguments may follow):");
 			}
-			if (n < len) {
-				n += snprintf(buf + n, len - n, "\n  %.*s",
-					      (int)elen, entry);
-			}
+			n = tedge_appendf(buf, len, n, "\n  %.*s", (int)elen,
+					  entry);
 			count++;
 		}
 		if (end == NULL || n >= len) {
