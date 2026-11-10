@@ -4,7 +4,8 @@
 
 Rules:
 
-1. core/, include/tedge/tedge.h and the port interface (include/tedge/port/)
+1. core/, provisioning/, their public headers (include/tedge/tedge.h,
+   include/tedge/provisioning.h) and the port interface (include/tedge/port/)
    use no RTOS API: no RTOS or vendor SDK headers, no Kconfig symbols
    (CONFIG_*), and none of the Zephyr calls and macros the core was written
    with (k_*, LOG_*, ARRAY_SIZE, ...), which an RTOS header included by
@@ -57,8 +58,8 @@ def is_code(path: Path) -> bool:
 
 
 def is_portable(rel: str) -> bool:
-    return rel.startswith(("core/", "include/tedge/port/")) \
-        or rel == "include/tedge/tedge.h"
+    return rel.startswith(("core/", "provisioning/", "include/tedge/port/")) \
+        or rel in ("include/tedge/tedge.h", "include/tedge/provisioning.h")
 
 
 def rtos_api(line: str) -> bool:

@@ -13,3 +13,12 @@ target_compile_definitions(tedge-lifecycle-test PRIVATE _POSIX_C_SOURCE=200809L
   _DEFAULT_SOURCE _DARWIN_C_SOURCE)
 target_link_libraries(tedge-lifecycle-test PRIVATE tedge::tedge)
 add_test(NAME lifecycle COMMAND tedge-lifecycle-test)
+
+if(TEDGE_PROVISIONING)
+  add_executable(tedge-provisioning-test test_provisioning.c)
+  set_target_properties(tedge-provisioning-test PROPERTIES C_STANDARD 11)
+  target_compile_definitions(tedge-provisioning-test PRIVATE
+    _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE _DARWIN_C_SOURCE)
+  target_link_libraries(tedge-provisioning-test PRIVATE tedge::tedge)
+  add_test(NAME provisioning COMMAND tedge-provisioning-test)
+endif()

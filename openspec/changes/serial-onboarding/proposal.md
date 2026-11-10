@@ -62,10 +62,13 @@ it is a separate option and a separate phase.
 
 ### Interface changes
 
-- **Public `tedge_*` API**: none. The library is a client of the existing
-  API. It has a public header of its own, `include/tedge/provisioning.h`,
-  through which the application supplies the Wi-Fi hook and reads the
-  progress.
+- **Public `tedge_*` API**: two read-only getters,
+  `tedge_get_device_id()` and `tedge_get_c8y_url()`, which the library
+  needs for its info command and which any application can use.
+  `tedge_stop()` now returns -EBUSY when the client thread does not end in
+  time, instead of reporting success. The library has a public header of
+  its own, `include/tedge/provisioning.h`, through which the application
+  supplies the Wi-Fi and identify hooks and the port connects a transport.
 - **Port interface**: none. The serial transport is fed by the port's glue
   code, outside the port interface.
 - **Messages the device sends to Cumulocity**: none.

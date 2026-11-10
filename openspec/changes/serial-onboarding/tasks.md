@@ -5,13 +5,13 @@
 
 ## 2. Provisioning library (portable, `provisioning/`)
 
-- [ ] 2.1 Public header `include/tedge/provisioning.h`: init with the Wi-Fi and identify hooks, the transport's write callback, feeding received bytes, and the current Improv state
-- [ ] 2.2 RPC layer: packet validation (length, checksum), Improv commands 0x01 to 0x03, errors 0x01 to 0x04, result packets with length-prefixed strings
-- [ ] 2.3 The Wi-Fi flow: provisioning state, the application's hook, success when `tedge_port_net_is_up()`, "unable to connect" after 30 s
-- [ ] 2.4 tiny-edge info (0xE0), onboard (0xE1) and identify (0xE2, with the application's hook), with the protocol version, the re-onboard flag, stop-set-start of the client, and no password in logs above debug
-- [ ] 2.5 Improv Serial framing: a byte-at-a-time parser that skips non-frame bytes, and a frame writer that hands one whole frame to the transport
-- [ ] 2.6 Host unit tests of the parser and the RPC layer (a C test under `tests/`, built by CMake and run in CI): every command, corrupted and split frames, log bytes between frames, oversized strings
-- [ ] 2.7 Extend `scripts/check-portability.py` to apply the core rules to `provisioning/`, and `tests/host-compile/run.sh` to compile it
+- [x] 2.1 Public header `include/tedge/provisioning.h`: init with the Wi-Fi and identify hooks, the transport's write callback, feeding received bytes, and the current Improv state
+- [x] 2.2 RPC layer: packet validation (length, checksum), Improv commands 0x01 to 0x03, errors 0x01 to 0x04, result packets with length-prefixed strings
+- [x] 2.3 The Wi-Fi flow: provisioning state, the application's hook, success when `tedge_port_net_is_up()`, "unable to connect" after 30 s
+- [x] 2.4 tiny-edge info (0xE0), onboard (0xE1) and identify (0xE2, with the application's hook), with the protocol version, the re-onboard flag, stop-set-start of the client, and no password in logs above debug
+- [x] 2.5 Improv Serial framing: a byte-at-a-time parser that skips non-frame bytes, and a frame writer that hands one whole frame to the transport
+- [x] 2.6 Host unit tests of the parser and the RPC layer (a C test in the POSIX port's tests, built by CMake and run in CI): every command, corrupted and split frames, log bytes between frames, oversized strings
+- [x] 2.7 Extend `scripts/check-portability.py` to apply the core rules to `provisioning/`, and `tests/host-compile/run.sh` to compile it
 
 ## 3. Zephyr glue
 
@@ -36,7 +36,7 @@
 ## 5. CI and release
 
 - [ ] 5.1 Workflow: `go vet`, `go test`, and builds of the tool for Linux, macOS and Windows (amd64 and arm64)
-- [ ] 5.2 Build and run the library's host tests in the posix workflow
+- [x] 5.2 Build and run the library's host tests in the posix workflow
 - [ ] 5.3 Attach the tool's binaries to tiny-edge releases
 
 ## 6. End-to-end verification
