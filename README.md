@@ -34,6 +34,9 @@ tiny-edge/
 │   ├── zephyr/          build glue, Kconfig, profiles, samples, tests, and the
 │   │                    Zephyr-only sources
 │   └── posix/           CMake library, options, sample, and tests
+├── provisioning/        optional library: set a device up over Improv Wi-Fi
+│                        (include/tedge/provisioning.h)
+├── tools/onboard/       tedge-onboard: set a device up from a computer
 ├── certs/               default trust anchors
 ├── cumulocity/          tenant setup: Smart Functions and DTM definitions
 ├── openspec/            specifications and change history
