@@ -37,6 +37,9 @@ if(CONFIG_TEDGE)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_AUTH_C8Y_CA src/tedge_port_crypto.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_PROVISIONING_SERIAL
     src/tedge_provisioning_console.c)
+  if(CONFIG_TEDGE_PROVISIONING AND CONFIG_WIFI)
+    zephyr_library_sources(src/tedge_provisioning_wifi.c)
+  endif()
   zephyr_library_compile_definitions(TEDGE_VERSION_STRING="${TEDGE_VERSION}")
   # gmtime_r() is POSIX, not C17. picolibc declares it anyway; a host libc
   # (native_sim) only does when asked, and an undeclared gmtime_r() returns

@@ -15,7 +15,7 @@
 #include <string.h>
 
 #if defined(CONFIG_TEDGE_PROVISIONING)
-#include <tedge/provisioning.h>
+#include <tedge/provisioning_zephyr.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/wifi_credentials.h>
 #endif
@@ -130,6 +130,7 @@ static int provision_wifi(const char *ssid, const char *password, void *ctx)
 
 static const struct tedge_provisioning_hooks provisioning_hooks = {
 	.wifi_connect = provision_wifi,
+	.wifi_scan = tedge_provisioning_wifi_scan,
 	.chip = CONFIG_SOC,
 };
 #endif
