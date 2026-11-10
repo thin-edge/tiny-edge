@@ -37,6 +37,8 @@ if(CONFIG_TEDGE)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_AUTH_C8Y_CA src/tedge_port_crypto.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_PROVISIONING_SERIAL
     src/tedge_provisioning_console.c)
+  zephyr_library_sources_ifdef(CONFIG_TEDGE_PROVISIONING
+    src/tedge_provisioning_zephyr.c)
   if(CONFIG_TEDGE_PROVISIONING AND CONFIG_WIFI)
     zephyr_library_sources(src/tedge_provisioning_wifi.c)
   endif()
