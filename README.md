@@ -14,7 +14,7 @@ so the client looks like a native library to the people who use that RTOS.
 | [Zephyr](ports/zephyr/README.md) | Verified on ESP32-C6, ESP32-S3, and ESP32 | A Zephyr module: a west project, Kconfig, profiles |
 | FreeRTOS (ESP-IDF first) | Planned | An ESP-IDF component; plain CMake for other FreeRTOS builds |
 | Eclipse ThreadX | Planned | CMake library with a user configuration header |
-| POSIX: Linux and macOS hosts, QNX, VxWorks RTP | Planned | CMake library; also runs the core's host tests |
+| [POSIX](ports/posix/README.md): Linux and macOS hosts; QNX and VxWorks RTP later | Run against Cumulocity on macOS; builds and passes its tests on Linux and macOS | A CMake library with CMake options |
 
 For example applications, see
 [microcontroller-devices](https://github.com/thin-edge/microcontroller-devices):
@@ -28,10 +28,12 @@ tiny-edge/
 │   ├── tedge.h          the public API, the same on every RTOS
 │   └── port/            the port interface: what each port implements
 ├── core/                the client: Cumulocity protocol, operations, parameters,
-│                        telemetry buffering, and the decision logic
+│                        telemetry buffering, and the decision logic;
+│                        sources.cmake lists its files by feature for every port
 ├── ports/
-│   └── zephyr/          build glue, Kconfig, profiles, samples, tests, and the
-│                        Zephyr-only sources
+│   ├── zephyr/          build glue, Kconfig, profiles, samples, tests, and the
+│   │                    Zephyr-only sources
+│   └── posix/           CMake library, options, sample, and tests
 ├── certs/               default trust anchors
 ├── cumulocity/          tenant setup: Smart Functions and DTM definitions
 ├── openspec/            specifications and change history
@@ -52,15 +54,15 @@ configuration header, so the core builds the same way everywhere.
 **`ports/<rtos>/`** holds what does depend on the RTOS. A port is small and
 follows the RTOS's own conventions for:
 
-| Concern | Zephyr port | Other ports |
-|---|---|---|
-| Packaging | Zephyr module, west project | The RTOS's component or library format |
-| Configuration | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | `tedge_user_config.h`, in the style of `FreeRTOSConfig.h` and `tx_user.h` (ESP-IDF uses Kconfig) |
-| Threads and locks | `k_thread`, `k_mutex`, work queues | The RTOS's task and mutex API |
-| Network and TLS | Zephyr sockets with TLS credentials | The RTOS's sockets with its usual TLS stack (mbedTLS, NetX Secure, OpenSSL) |
-| Persistent settings | Settings subsystem | NVS, a file, or the RTOS's key-value store |
-| Firmware update | MCUboot | MCUboot, or the platform's own OTA mechanism |
-| Logging and shell | Zephyr logging and shell | The RTOS's logging |
+| Concern | Zephyr port | POSIX port | Other ports |
+|---|---|---|---|
+| Packaging | Zephyr module, west project | CMake library | The RTOS's component or library format |
+| Configuration | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | CMake options `TEDGE_*` | `tedge_user_config.h`, in the style of `FreeRTOSConfig.h` and `tx_user.h` (ESP-IDF uses Kconfig) |
+| Threads and locks | `k_thread`, `k_mutex`, work queues | pthreads | The RTOS's task and mutex API |
+| Network and TLS | Zephyr sockets with TLS credentials | BSD sockets with mbedTLS | The RTOS's sockets with its usual TLS stack (mbedTLS, NetX Secure, OpenSSL) |
+| Persistent settings | Settings subsystem | A file per key | NVS, a file, or the RTOS's key-value store |
+| Firmware update | MCUboot | Not yet | MCUboot, or the platform's own OTA mechanism |
+| Logging and shell | Zephyr logging and shell | Standard error | The RTOS's logging |
 
 The port interface sits at the transport level: a port provides a TLS byte
 stream, and the core speaks MQTT, HTTP, and WebSocket over it. One protocol
