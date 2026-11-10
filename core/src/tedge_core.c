@@ -179,6 +179,33 @@ int tedge_set_c8y_url(const char *host)
 	return tedge_c8y_host_set(host);
 }
 
+int tedge_get_c8y_url(char *buf, size_t len)
+{
+	const char *host = tedge_c8y_host();
+	size_t n = strlen(host);
+
+	if (n >= len) {
+		return -ENOSPC;
+	}
+	memcpy(buf, host, n + 1);
+	return (int)n;
+}
+
+int tedge_get_device_id(char *buf, size_t len)
+{
+	size_t n;
+
+	if (!initialised) {
+		return -EPERM;
+	}
+	n = strlen(identity.external_id);
+	if (n >= len) {
+		return -ENOSPC;
+	}
+	memcpy(buf, identity.external_id, n + 1);
+	return (int)n;
+}
+
 static void load_c8y_host(void)
 {
 	int n = tedge_port_kv_get(TEDGE_KEY_C8Y_URL, c8y_host,

@@ -171,6 +171,22 @@ int tedge_stop(void);
 /** @brief Current state. */
 enum tedge_state tedge_get_state(void);
 
+/**
+ * @brief The device's external ID in Cumulocity, as tedge_init() settled it.
+ *
+ * @return Its length; -EPERM before tedge_init(); -ENOSPC when @p len is too
+ *         small.
+ */
+int tedge_get_device_id(char *buf, size_t len);
+
+/**
+ * @brief The Cumulocity tenant host the client uses: the one set with
+ *        tedge_set_c8y_url(), else TEDGE_C8Y_URL. Empty when neither is set.
+ *
+ * @return Its length; -ENOSPC when @p len is too small.
+ */
+int tedge_get_c8y_url(char *buf, size_t len);
+
 /* ------------------------------------------------------------------------ */
 /* Onboarding (TEDGE_AUTH_C8Y_CA)                                     */
 /* ------------------------------------------------------------------------ */
