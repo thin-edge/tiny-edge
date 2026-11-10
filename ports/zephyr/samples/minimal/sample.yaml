@@ -86,3 +86,21 @@ tests:
       - prj.conf
       - ../../profiles/full.conf
       - ../../profiles/boards/esp32s3-devkitc.conf
+  sample.tedge.minimal.esp32s3.onboarding:
+    build_only: true
+    platform_allow: esp32s3_devkitc/esp32s3/procpu
+    integration_platforms: [esp32s3_devkitc/esp32s3/procpu]
+    extra_conf_files:
+      - prj.conf
+      - ../../profiles/minimal.conf
+      - ../../profiles/boards/esp32s3-devkitc.conf
+      - overlay-onboarding.conf
+  sample.tedge.minimal.esp32c6.onboarding:
+    build_only: true
+    platform_allow: esp32c6_devkitc/esp32c6/hpcore
+    integration_platforms: [esp32c6_devkitc/esp32c6/hpcore]
+    extra_conf_files:
+      - prj.conf
+      - ../../profiles/minimal.conf
+      - ../../profiles/boards/esp32c6-devkitc.conf
+      - overlay-onboarding.conf

@@ -16,9 +16,12 @@ if(CONFIG_TEDGE)
   # The core's files for the features this build has (core/sources.cmake),
   # then the Zephyr side of the port interface.
   include(${TEDGE_ROOT}/core/sources.cmake)
+  include(${TEDGE_ROOT}/provisioning/sources.cmake)
   tedge_core_sources(_core_sources CONFIG_)
+  tedge_provisioning_sources(_provisioning_sources CONFIG_)
   zephyr_library_sources(
     ${_core_sources}
+    ${_provisioning_sources}
     src/tedge_platform.c
     src/tedge_port.c
     src/tedge_port_os.c
@@ -32,6 +35,8 @@ if(CONFIG_TEDGE)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_COREDUMP src/tedge_coredump.c)
   zephyr_library_sources_ifdef(CONFIG_SHELL src/tedge_shell.c)
   zephyr_library_sources_ifdef(CONFIG_TEDGE_AUTH_C8Y_CA src/tedge_port_crypto.c)
+  zephyr_library_sources_ifdef(CONFIG_TEDGE_PROVISIONING_SERIAL
+    src/tedge_provisioning_console.c)
   zephyr_library_compile_definitions(TEDGE_VERSION_STRING="${TEDGE_VERSION}")
   # gmtime_r() is POSIX, not C17. picolibc declares it anyway; a host libc
   # (native_sim) only does when asked, and an undeclared gmtime_r() returns

@@ -821,6 +821,48 @@ config TEDGE_TLS_TAG_BASE
 
 endmenu
 
+menuconfig TEDGE_PROVISIONING
+	bool "Provisioning library: set the device up over Improv Wi-Fi"
+	help
+	  An optional library beside the client (include/tedge/provisioning.h)
+	  that answers the Improv Wi-Fi protocol, as tedge-onboard, ESP Web
+	  Tools and Improv phone apps speak it. It hands a Wi-Fi network to
+	  the application's hook, and the Cumulocity tenant and one-time
+	  password to the client. The application calls
+	  tedge_provisioning_init() after tedge_init().
+
+if TEDGE_PROVISIONING
+
+config TEDGE_PROVISIONING_SERIAL
+	bool "Improv Serial on the console"
+	default y
+	help
+	  With the shell, "tedge improv" hands the console to a provisioning
+	  tool until it has been quiet for TEDGE_PROVISIONING_SERIAL_IDLE_S.
+	  Without the shell, the console speaks Improv from boot, beside the
+	  log output.
+
+config TEDGE_PROVISIONING_SERIAL_IDLE_S
+	int "Seconds without a valid frame before the shell gets the console back"
+	default 60
+	depends on TEDGE_PROVISIONING_SERIAL && SHELL
+
+config TEDGE_PROVISIONING_BLE
+	bool "Improv over Bluetooth LE (not implemented yet)"
+	depends on TEDGE_EXPERIMENTAL_FEATURES
+	help
+	  Phase 2 of the serial-onboarding change: the Improv GATT service on
+	  the same RPC layer.
+
+config TEDGE_PROVISIONING_STACK_SIZE
+	int "Stack of the provisioning worker thread"
+	default 4096
+	help
+	  The worker answers each request; it calls the application's Wi-Fi
+	  hook and stops and starts the client.
+
+endif # TEDGE_PROVISIONING
+
 module = TEDGE
 module-str = tedge
 source "subsys/logging/Kconfig.template.log_config"
