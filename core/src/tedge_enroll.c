@@ -450,7 +450,10 @@ int tedge_auth_prepare(char *id_out, size_t id_len)
 		if (ret == 0) {
 			break;
 		}
-		tedge_port_sleep_ms(wait_s * 1000);
+		if (tedge_wait_for_stop(wait_s * 1000)) {
+			ret = -ECANCELED;
+			break;
+		}
 		wait_s = TEDGE_MIN(wait_s * 2, 60U);
 		ret = -EAGAIN;
 	}

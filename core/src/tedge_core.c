@@ -330,6 +330,9 @@ static void client_thread(void *arg)
 
 		tedge_set_state(TEDGE_STATE_CONNECTING);
 		rc = transport->connect();
+		if (rc == -ECANCELED) {
+			break; /* tedge_stop() during enrollment */
+		}
 		if (rc != 0) {
 			backoff = tedge_backoff_next(backoff,
 						     TEDGE_RECONNECT_BACKOFF_MAX_S);
@@ -398,6 +401,7 @@ static void client_thread(void *arg)
 TEDGE_PORT_STACK_DEFINE(client_stack, TEDGE_THREAD_STACK_SIZE);
 static tedge_port_thread_t client_tid;
 static bool running;
+static bool started_once;
 
 /* ------------------------------------------------------------------------ */
 /* Public lifecycle                                                          */
@@ -461,18 +465,25 @@ int tedge_start(void)
 		return -EALREADY;
 	}
 	tedge_port_event_clear(&events, EV_STOP);
+	/* Once per boot: a client stopped and started again (to take new
+	 * onboarding data, say) has declared all this already. */
+	if (!started_once) {
+		started_once = true;
 #if defined(TEDGE_LOG_UPLOAD)
-	tedge_log_upload_init();
+		tedge_log_upload_init();
 #endif
 #if defined(TEDGE_PARAMETERS_SELF)
-	/* After the application's sets, so a declaration of its own wins a
-	 * name clash, and before the sweep, which needs them all. */
-	tedge_self_params_declare();
+		/* After the application's sets, so a declaration of its own
+		 * wins a name clash, and before the sweep, which needs them
+		 * all. */
+		tedge_self_params_declare();
 #endif
 #if defined(TEDGE_PARAMETERS)
-	/* Every set the application means to declare is declared by now. */
-	tedge_params_on_start();
+		/* Every set the application means to declare is declared by
+		 * now. */
+		tedge_params_on_start();
 #endif
+	}
 	running = true;
 	(void)tedge_port_thread_start(&client_tid, client_stack,
 				      TEDGE_PORT_STACK_SIZEOF(client_stack),
@@ -486,7 +497,17 @@ int tedge_stop(void)
 		return -EALREADY;
 	}
 	tedge_port_event_post(&events, EV_STOP | EV_WAKE);
-	(void)tedge_port_thread_join(&client_tid, 10000);
+	/* A thread still running after the wait (stuck in a network call
+	 * longer than any of its timeouts) keeps the client "running": a
+	 * start now would put a second thread on the same stack. */
+	if (tedge_port_thread_join(&client_tid, 10000) != 0) {
+		return -EBUSY;
+	}
 	running = false;
 	return 0;
+}
+
+bool tedge_wait_for_stop(uint32_t ms)
+{
+	return (tedge_port_event_wait(&events, EV_STOP, ms) & EV_STOP) != 0;
 }

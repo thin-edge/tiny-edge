@@ -156,7 +156,16 @@ int tedge_init(const struct tedge_identity *identity,
  */
 int tedge_start(void);
 
-/** @brief Disconnect and stop the client thread. */
+/**
+ * @brief Disconnect and stop the client thread.
+ *
+ * Waits up to 10 seconds for the thread to end. The client can then be
+ * given new settings (tedge_set_c8y_url(), tedge_set_enroll_otp()) and
+ * started again with tedge_start().
+ *
+ * @return 0; -EALREADY when the client is not running; -EBUSY when the
+ *         thread did not end in time (call again later).
+ */
 int tedge_stop(void);
 
 /** @brief Current state. */

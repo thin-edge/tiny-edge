@@ -1,7 +1,7 @@
 ## 1. Client prerequisites
 
-- [ ] 1.1 Verify that `tedge_stop()` followed by `tedge_set_c8y_url()`, `tedge_set_enroll_otp()` and `tedge_start()` is clean while the client waits for registration, on the POSIX port (sample against a tenant) and on Zephyr native_sim; fix the core if a thread, socket or event survives the stop
-- [ ] 1.2 Add a host test of that stop-start cycle to the POSIX port tests, so the library can rely on it
+- [x] 1.1 Verify that `tedge_stop()` followed by `tedge_set_c8y_url()`, `tedge_set_enroll_otp()` and `tedge_start()` is clean while the client waits for registration, on the POSIX port (sample against a tenant) and on Zephyr native_sim; fix the core if a thread, socket or event survives the stop
+- [x] 1.2 Add a host test of that stop-start cycle to the POSIX port tests, so the library can rely on it
 
 ## 2. Provisioning library (portable, `provisioning/`)
 

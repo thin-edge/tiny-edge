@@ -65,6 +65,11 @@ int tedge_c8y_host_set(const char *host);
 /** Ask the client to drop this session and connect again (a new credential). */
 void tedge_request_reconnect(void);
 
+/** Wait up to @p ms, or less when tedge_stop() asks the client thread to
+ *  end. @return true when a stop was asked for. For the client thread's
+ *  long waits, so a stop does not wait them out. */
+bool tedge_wait_for_stop(uint32_t ms);
+
 /** Republish every stored twin fragment (after a reconnect). */
 void tedge_twin_republish(void);
 
