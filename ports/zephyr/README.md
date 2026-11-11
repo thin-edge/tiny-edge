@@ -335,6 +335,13 @@ and act on the oldest operation in that state, so a single operation left
 EXECUTING by a reset would swallow the result of every operation after it —
 which is exactly what happened on a test device before this changed.
 
+**An operation interrupted by a reset is reported as failed.** The client
+keeps the operation it is running in settings until it ends. After a crash,
+a watchdog reset, or a power loss, the first connection reports that
+operation as failed ("the device restarted while the operation was
+running"), so it does not stay EXECUTING. The restart and firmware update
+operations end after a reboot on purpose, and are reported as before.
+
 Turn `CONFIG_TEDGE_C8Y_OPERATION_JSON` off for a tenant that does not serve
 that topic; the client then uses `s/ds` and the older statuses.
 

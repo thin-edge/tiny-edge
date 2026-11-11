@@ -275,6 +275,14 @@ for the operation that caused it.
 - **THEN** the later operation gets its own result, and the interrupted one
   is not reported as that result
 
+#### Scenario: The interrupted operation is failed after the reboot
+
+- **WHEN** a device resets while an operation other than a restart or a
+  firmware update is executing
+- **THEN** once connected again it reports that operation as failed, with a
+  reason that says the device restarted while it was running
+- **AND** an operation that ended before a reboot is not reported again
+
 #### Scenario: A restart across the reboot
 
 - **WHEN** a device restarts because the cloud asked it to

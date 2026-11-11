@@ -138,6 +138,66 @@ static bool op_executing;
 static char op_queue[OP_QUEUE_DEPTH][OP_LINE_MAX];
 static uint8_t op_queued;
 
+/* The operation in flight is also kept in settings, as the status that
+ * started it ("504,<id>" or "501,<fragment>"), and removed when it ends. A
+ * reset in between (a crash, a watchdog, the power) leaves it there, and
+ * the first session after the reboot reports it as failed. Without that,
+ * the operation stays EXECUTING in Cumulocity for ever.
+ *
+ * The restart and the firmware update end across a reboot on purpose: they
+ * remove this key and keep their own. */
+#define OP_MARK_MAX 48
+
+/* What the boot before left running; reported once, by session_start(). */
+static char op_interrupted[OP_MARK_MAX];
+
+/* "504,<id>" or "501,<fragment>": the key of the operation @p line starts
+ * or ends. @return its length, or 0 when @p line is not such a status. */
+static int op_mark_of(const char *line, int tmpl, char *out, size_t len)
+{
+	char field[OP_MARK_MAX - 4];
+	int start;
+
+	switch (tmpl) {
+	case 501: case 502: case 503:
+		start = 501;
+		break;
+	case 504: case 505: case 506:
+		start = 504;
+		break;
+	default:
+		return 0;
+	}
+	if (tedge_sr_field(line, 1, field, sizeof(field)) <= 0) {
+		return 0;
+	}
+	int n = snprintf(out, len, "%d,%s", start, field);
+
+	return (n > 0 && (size_t)n < len) ? n : 0;
+}
+
+static void op_mark_update(const char *line, int tmpl)
+{
+	char mark[OP_MARK_MAX];
+	char stored[OP_MARK_MAX];
+	int n = op_mark_of(line, tmpl, mark, sizeof(mark));
+	int m;
+
+	if (n == 0) {
+		return;
+	}
+	if (tmpl == 501 || tmpl == 504) {
+		(void)tedge_port_kv_set(TEDGE_KEY_OP_RUNNING, mark, (size_t)n);
+		return;
+	}
+	/* Only the operation it names: a restart or firmware update reported
+	 * after its reboot ends while another operation may be running. */
+	m = tedge_port_kv_get(TEDGE_KEY_OP_RUNNING, stored, sizeof(stored) - 1);
+	if (m == n && memcmp(stored, mark, (size_t)n) == 0) {
+		(void)tedge_port_kv_delete(TEDGE_KEY_OP_RUNNING);
+	}
+}
+
 int tedge_c8y_publish_sr(const char *line)
 {
 	int tmpl = tedge_sr_template(line);
@@ -147,7 +207,47 @@ int tedge_c8y_publish_sr(const char *line)
 	} else if (tmpl == 502 || tmpl == 503 || tmpl == 505 || tmpl == 506) {
 		op_executing = false;
 	}
+	op_mark_update(line, tmpl);
 	return publish("s/us", line, QOS_1);
+}
+
+/* Read what the boot before left running, once, before anything of this
+ * boot can overwrite it. */
+static void op_interrupted_load(void)
+{
+	int n = tedge_port_kv_get(TEDGE_KEY_OP_RUNNING, op_interrupted,
+				  sizeof(op_interrupted) - 1);
+
+	op_interrupted[(n > 0) ? n : 0] = '\0';
+	if (op_interrupted[0] != '\0') {
+		TEDGE_LOG_WRN("the device restarted while an operation was running "
+			      "(%s); it is reported as failed once connected",
+			      op_interrupted);
+	}
+}
+
+/* Fail the operation the boot before left running. Called before the
+ * pending operations are asked for, so no operation of this boot is
+ * running yet. */
+static void op_interrupted_report(void)
+{
+	char line[OP_MARK_MAX + 80];
+	char quoted[72];
+
+	if (op_interrupted[0] == '\0') {
+		return;
+	}
+	(void)tedge_sr_quote("the device restarted while the operation was running",
+			     quoted, sizeof(quoted));
+	/* "504,<id>" becomes "505,<id>,...", "501,<name>" "502,<name>,...". */
+	snprintf(line, sizeof(line), "%d%s,%s",
+		 (op_interrupted[2] == '4') ? 505 : 502, op_interrupted + 3,
+		 quoted);
+	if (tedge_c8y_publish_sr(line) == 0) {
+		TEDGE_LOG_INF("operation %s reported as failed: the device "
+			      "restarted while it was running", op_interrupted + 4);
+		op_interrupted[0] = '\0';
+	}
 }
 
 const char *tedge_c8y_jwt(void)
@@ -355,6 +455,8 @@ static void handle_restart(void)
 	} else {
 		(void)tedge_port_kv_set(TEDGE_KEY_RESTART, &one, sizeof(one));
 	}
+	/* Its own marker reports it after the reboot: not as interrupted. */
+	(void)tedge_port_kv_delete(TEDGE_KEY_OP_RUNNING);
 	tedge_port_sleep_ms(500);
 	tedge_mqtt_disconnect(&client);
 	tedge_port_close(conn);
@@ -941,6 +1043,7 @@ static int session_start(void)
 	 * it an operation can sit PENDING until something else prompts a
 	 * redelivery, which looks from the cloud like a device that has
 	 * stopped listening. */
+	op_interrupted_report();
 	(void)tedge_c8y_publish_sr("500");
 	{
 #if defined(TEDGE_PARAMETERS_SELF)
@@ -1263,6 +1366,12 @@ static const struct tedge_transport c8y_transport = {
 
 const struct tedge_transport *tedge_transport_get(void)
 {
+	static bool op_loaded;
+
+	if (!op_loaded) {
+		op_loaded = true;
+		op_interrupted_load();
+	}
 #if defined(TEDGE_RESTART)
 	static bool marker_loaded;
 

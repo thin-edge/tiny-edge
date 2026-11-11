@@ -307,6 +307,9 @@ static void download_thread(void *arg)
 		job_running = false;
 		return;
 	}
+	/* The new image reports the operation, through the marker: it was
+	 * not interrupted. */
+	(void)tedge_port_kv_delete(TEDGE_KEY_OP_RUNNING);
 	post(TEDGE_FW_REBOOTING, "installing %s", job.version);
 	tedge_port_sleep_ms(1500); /* let the report and the progress leave */
 	tedge_device_reset();

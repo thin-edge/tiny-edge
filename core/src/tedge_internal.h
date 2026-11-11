@@ -571,5 +571,8 @@ const char *tedge_auth_password(void);
  * swap, which may be older code. */
 #define TEDGE_KEY_FIRMWARE_SIZE  TEDGE_SETTINGS_ROOT "/firmware_size"
 #define TEDGE_KEY_FIRMWARE_OP    TEDGE_SETTINGS_ROOT "/firmware_op"
+/* The operation in flight: "504,<id>" or "501,<fragment>". Still there
+ * after a reboot means the device restarted while the operation ran. */
+#define TEDGE_KEY_OP_RUNNING     TEDGE_SETTINGS_ROOT "/op_running"
 
 #endif /* TEDGE_INTERNAL_H_ */
