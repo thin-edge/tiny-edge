@@ -1,0 +1,378 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The client's options on ESP-IDF. The names are the core's (TEDGE_*), so
+# the core sees CONFIG_TEDGE_HEALTH as TEDGE_HEALTH (cmake/tedge_config.cmake
+# maps them), and the defaults are the other ports' unless ESP-IDF needs
+# something else. Set them with `idf.py menuconfig` or sdkconfig.defaults.
+
+menu "tiny-edge (thin-edge.io client)"
+
+config TEDGE_TRANSPORT_C8Y
+	bool
+	default y
+	# Several client threads hold TLS sessions at once, and share PSA's
+	# key slots and random generator.
+	select MBEDTLS_THREADING_C
+
+menu "Cumulocity"
+
+config TEDGE_C8Y_URL
+	string "Cumulocity tenant host"
+	default ""
+	help
+	  Host name of the Cumulocity tenant, e.g. "example.cumulocity.com",
+	  without a scheme. The application can also set it at run time
+	  (tedge_set_c8y_url()), which the client remembers.
+
+config TEDGE_C8Y_CA_FILES
+	string "Trust anchors for the tenant (PEM files, space-separated)"
+	default "certs/godaddy-root-g2.pem"
+	help
+	  Paths relative to the tiny-edge repository, or absolute. They are
+	  embedded and given to TLS as the server's trust anchors. The default
+	  is the root the *.cumulocity.com chains end in.
+
+config TEDGE_SNTP
+	bool "Set the clock with SNTP when it is not already valid"
+	default y
+	help
+	  Certificates cannot be validated without the time. With this off,
+	  the application must set the clock before the client connects.
+
+config TEDGE_SNTP_SERVER
+	string "SNTP server"
+	default "pool.ntp.org"
+	depends on TEDGE_SNTP
+
+config TEDGE_C8Y_OPERATION_JSON
+	bool "Receive operations with their id (devicecontrol/notifications)"
+	default y
+
+config TEDGE_C8Y_PAYLOAD_BYTES
+	int "Largest message the client accepts"
+	default 2048 if TEDGE_C8Y_OPERATION_JSON
+	default 1024
+	range 512 8192
+
+config TEDGE_REQUIRED_INTERVAL_MIN
+	int "Required interval reported to Cumulocity (minutes)"
+	default 60
+
+config TEDGE_RECONNECT_BACKOFF_MAX_S
+	int "Longest wait between reconnect attempts (s)"
+	default 300
+	range 5 3600
+
+choice TEDGE_AUTH
+	prompt "How the device authenticates"
+	default TEDGE_AUTH_C8Y_CA
+
+config TEDGE_AUTH_C8Y_CA
+	bool "Certificate from the Cumulocity CA (enrollment)"
+	# The device writes its own certificate request.
+	select MBEDTLS_X509_CREATE_C
+	select MBEDTLS_X509_CSR_WRITE_C
+	select MBEDTLS_PK_WRITE_C
+	select MBEDTLS_PEM_WRITE_C
+
+config TEDGE_AUTH_BOOTSTRAP
+	bool "Device credentials from a bootstrap user"
+
+endchoice
+
+config TEDGE_ENROLL_POLL_S
+	int "Seconds between enrollment attempts"
+	default 10
+	depends on TEDGE_AUTH_C8Y_CA
+
+config TEDGE_BOOTSTRAP_USER
+	string "Bootstrap user (tenant/username)"
+	default ""
+	depends on TEDGE_AUTH_BOOTSTRAP
+
+config TEDGE_BOOTSTRAP_PASSWORD
+	string "Bootstrap password"
+	default ""
+	depends on TEDGE_AUTH_BOOTSTRAP
+
+choice TEDGE_C8Y_ENDPOINT
+	prompt "Cumulocity MQTT endpoint"
+	default TEDGE_C8Y_MQTT_SERVICE if TEDGE_AUTH_C8Y_CA
+	default TEDGE_C8Y_CORE_MQTT
+
+config TEDGE_C8Y_MQTT_SERVICE
+	bool "MQTT service (free-form topics)"
+	depends on TEDGE_AUTH_C8Y_CA
+
+config TEDGE_C8Y_CORE_MQTT
+	bool "Core MQTT (SmartREST)"
+
+endchoice
+
+config TEDGE_DEVICE_ID_PREFIX
+	string "Default external ID prefix"
+	default "tedge"
+	help
+	  The default device id is this prefix followed by the station MAC
+	  address.
+
+config TEDGE_DEVICE_TYPE
+	string "Default device type"
+	default "thin-edge.io-esp-idf"
+
+endmenu # Cumulocity
+
+menu "Features"
+
+config TEDGE_TELEMETRY
+	bool "Telemetry (measurements, events, alarms)"
+	default y
+
+config TEDGE_TELEMETRY_BUFFER_BYTES
+	int "Bytes held for telemetry that cannot be sent yet"
+	default 2048
+	depends on TEDGE_TELEMETRY
+
+config TEDGE_HEALTH
+	bool "Device health measurements"
+	default y
+	select TEDGE_TELEMETRY
+
+config TEDGE_HEALTH_INTERVAL_S
+	int "Seconds between health measurements"
+	default 900
+	depends on TEDGE_HEALTH
+
+config TEDGE_RESTART
+	bool "Restart operation"
+	default y
+
+config TEDGE_FIRMWARE_UPDATE
+	bool "Firmware update (OTA partitions, with rollback)"
+	default y
+	select TEDGE_HTTP
+	help
+	  Writes the new image to the next OTA partition and boots it on
+	  trial: the image is kept only once it confirms itself, and the
+	  bootloader rolls it back otherwise. Needs a partition table with two
+	  OTA app partitions and CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE.
+
+if TEDGE_FIRMWARE_UPDATE
+
+config TEDGE_FIRMWARE_STACK_SIZE
+	int "Stack of the download thread (bytes)"
+	default 12288
+	help
+	  A TLS handshake runs on this thread. ESP-IDF's mbedTLS needs more
+	  stack for it than Zephyr's: the log upload thread was measured at
+	  8.1 KB on an ESP32-C6, so 8192 overflows. 12288 leaves a 4 KB margin.
+
+config TEDGE_FIRMWARE_CONFIRM_AFTER_CONNECT
+	bool "Confirm a test-booted image once it reaches the cloud"
+	default y
+
+config TEDGE_FIRMWARE_CONFIRM_TIMEOUT_S
+	int "Seconds a test-booted image has to confirm itself"
+	default 900
+	range 0 86400
+
+config TEDGE_FIRMWARE_PROGRESS
+	bool "Publish download progress on a free-form topic"
+	default y
+	depends on TEDGE_C8Y_MQTT_SERVICE
+
+config TEDGE_FIRMWARE_PROGRESS_PERCENT
+	int "Percentage step between progress messages"
+	default 10
+	range 1 50
+	depends on TEDGE_FIRMWARE_PROGRESS
+
+endif # TEDGE_FIRMWARE_UPDATE
+
+config TEDGE_LOG_UPLOAD
+	bool "Log upload"
+	default y
+	select TEDGE_HTTP
+	help
+	  Keeps the image's recent log lines (ESP_LOG output) in RAM and
+	  uploads them when the cloud asks.
+
+if TEDGE_LOG_UPLOAD
+
+config TEDGE_LOG_RING_BYTES
+	int "The image's log kept in RAM (bytes)"
+	default 2048
+
+config TEDGE_LOG_TYPE_SLOTS
+	int "Log types the client can hold"
+	default 4
+
+config TEDGE_LOG_UPLOAD_MAX_BYTES
+	int "Most bytes one request may send"
+	default 8192
+
+config TEDGE_LOG_UPLOAD_STACK_SIZE
+	int "Stack of the upload thread (bytes)"
+	default 12288
+	help
+	  A TLS handshake runs on this thread. ESP-IDF's mbedTLS needs more
+	  stack for it than Zephyr's: the log upload thread was measured at
+	  8.1 KB on an ESP32-C6, so 8192 overflows. 12288 leaves a 4 KB margin.
+
+endif # TEDGE_LOG_UPLOAD
+
+config TEDGE_REMOTE_ACCESS
+	bool "Remote access (tunnel to the device and its network)"
+	default y
+	depends on TEDGE_AUTH_C8Y_CA
+	select TEDGE_HTTP_CLIENT
+
+if TEDGE_REMOTE_ACCESS
+
+choice TEDGE_REMOTE_ACCESS_TARGETS
+	prompt "Which hosts a tunnel may reach"
+	default TEDGE_REMOTE_ACCESS_TARGETS_LAN
+
+config TEDGE_REMOTE_ACCESS_TARGETS_LAN
+	bool "The device and its subnet"
+
+config TEDGE_REMOTE_ACCESS_TARGETS_LIST
+	bool "Only the allow-list"
+
+config TEDGE_REMOTE_ACCESS_TARGETS_LOCAL
+	bool "Only the device itself"
+
+endchoice
+
+config TEDGE_REMOTE_ACCESS_ALLOW_LIST
+	string "Allow-list of host:port targets"
+	default ""
+
+config TEDGE_REMOTE_ACCESS_STACK_SIZE
+	int "Stack of each session's bridge thread (bytes)"
+	default 12288
+	help
+	  A TLS handshake runs on this thread. ESP-IDF's mbedTLS needs more
+	  stack for it than Zephyr's: the log upload thread was measured at
+	  8.1 KB on an ESP32-C6, so 8192 overflows. 12288 leaves a 4 KB margin.
+
+config TEDGE_REMOTE_ACCESS_TWIN_SESSIONS
+	bool "List the open sessions' targets in the twin data"
+	default y
+
+config TEDGE_REMOTE_ACCESS_MAX_SESSIONS
+	int "Maximum concurrent sessions"
+	default 1
+
+config TEDGE_REMOTE_ACCESS_BUF_SIZE
+	int "Bridge buffer size per direction (bytes)"
+	default 2048
+
+config TEDGE_REMOTE_ACCESS_IDLE_TIMEOUT_S
+	int "Close a session after this many idle seconds (0 = never)"
+	default 900
+
+config TEDGE_REMOTE_ACCESS_MDNS
+	bool "Resolve .local targets over mDNS"
+	default y
+
+config TEDGE_REMOTE_ACCESS_RESOLVE_TIMEOUT_MS
+	int "How long each lookup of a target name waits (ms)"
+	default 5000
+
+config TEDGE_REMOTE_ACCESS_RESOLVE_ATTEMPTS
+	int "Lookups of a target name before the session fails"
+	default 3
+
+config TEDGE_REMOTE_ACCESS_RESOLVE_RETRY_DELAY_MS
+	int "Pause between lookups of a target name (ms)"
+	default 500
+
+endif # TEDGE_REMOTE_ACCESS
+
+config TEDGE_PARAMETERS
+	bool "Parameters"
+	default y
+
+config TEDGE_PARAMETERS_MAX
+	int "Maximum declared parameters, across all sets"
+	default 16
+	depends on TEDGE_PARAMETERS
+
+config TEDGE_PARAMETERS_SELF
+	bool "Offer the client's own tunables as a parameter set"
+	default y
+	depends on TEDGE_PARAMETERS
+
+config TEDGE_CERT_RENEWAL
+	bool "Certificate renewal"
+	default y
+	depends on TEDGE_AUTH_C8Y_CA
+	select TEDGE_HTTP
+
+if TEDGE_CERT_RENEWAL
+
+config TEDGE_CERT_RENEW_BEFORE_DAYS
+	int "Renew when this many days of lifetime are left"
+	default 30
+
+config TEDGE_CERT_RENEW_ALARM_DAYS
+	int "Raise an alarm when this many days are left and renewal failed"
+	default 7
+
+config TEDGE_CERT_RENEW_CHECK_HOURS
+	int "Hours between certificate checks"
+	default 24
+
+endif # TEDGE_CERT_RENEWAL
+
+endmenu # Features
+
+# What the features need: never set directly.
+config TEDGE_HTTP_CLIENT
+	bool
+	default y if TEDGE_AUTH_C8Y_CA
+
+config TEDGE_HTTP
+	bool
+	select TEDGE_HTTP_CLIENT
+
+config TEDGE_HTTP_MAX_REDIRECTS
+	int "HTTP redirects to follow"
+	default 3
+	depends on TEDGE_HTTP
+
+menu "Resources"
+
+config TEDGE_LOG_LEVEL
+	int "Log level (0 none, 1 error, 2 warning, 3 info, 4 debug)"
+	default 3
+	range 0 4
+
+config TEDGE_THREAD_STACK_SIZE
+	int "Client thread stack size (bytes)"
+	default 8192
+	help
+	  The client thread runs the TLS handshakes with the tenant, which
+	  take more stack with ESP-IDF's mbedTLS than with Zephyr's.
+
+config TEDGE_THREAD_PRIORITY
+	int "Client thread priority (FreeRTOS priority)"
+	default 5
+	range 1 24
+	help
+	  Every client thread runs at this priority. Keep it below the
+	  application's time-critical tasks and the Wi-Fi and lwIP tasks
+	  (ESP-IDF runs those at 18 to 23).
+
+config TEDGE_HEAP_SIZE
+	int "Client heap allowance (bytes)"
+	default 16384 if TEDGE_PARAMETERS
+	default 10240
+	help
+	  The most the client takes from the heap at once, so its use is
+	  bounded and measured. TLS buffers are mbedTLS's, outside of it.
+
+endmenu # Resources
+
+endmenu

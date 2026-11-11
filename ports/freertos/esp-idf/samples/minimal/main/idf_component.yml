@@ -1,0 +1,9 @@
+# The tiny-edge component from this checkout. An application outside the
+# repository names it by git instead:
+#
+#   tiny_edge:
+#     git: https://github.com/thin-edge/tiny-edge.git
+#     path: ports/freertos/esp-idf/tiny_edge
+dependencies:
+  tiny_edge:
+    path: ../../../tiny_edge

@@ -1,0 +1,15 @@
+menu "tiny-edge sample"
+
+config SAMPLE_WIFI_SSID
+	string "Wi-Fi network (SSID)"
+	default ""
+
+config SAMPLE_WIFI_PASSWORD
+	string "Wi-Fi password"
+	default ""
+
+config SAMPLE_MEASUREMENT_INTERVAL_S
+	int "Seconds between measurements"
+	default 60
+
+endmenu

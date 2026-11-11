@@ -29,6 +29,7 @@
 #include <tedge/port/log.h>
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -184,7 +185,7 @@ static int check_value(const struct tedge_parameter *p, const char *raw,
 		}
 		if (v < p->min || v > p->max) {
 			snprintf(reason, reason_len,
-				 "%s: %ld is outside %d..%d", p->name, v,
+				 "%s: %ld is outside %" PRId32 "..%" PRId32, p->name, v,
 				 p->min, p->max);
 			return -ERANGE;
 		}
@@ -308,7 +309,7 @@ static void load_stored(struct param_set *set)
 		case TEDGE_PARAM_TYPE_BOOL:
 			continue;
 		case TEDGE_PARAM_TYPE_INT:
-			snprintf(raw, sizeof(raw), "%d", v->v.i);
+			snprintf(raw, sizeof(raw), "%" PRId32, v->v.i);
 			break;
 		case TEDGE_PARAM_TYPE_STRING:
 		case TEDGE_PARAM_TYPE_ENUM:
@@ -375,7 +376,7 @@ static void publish(const struct param_set *set)
 					  v->v.b ? "true" : "false");
 			break;
 		case TEDGE_PARAM_TYPE_INT:
-			n = tedge_appendf(json, size, n, "%d", v->v.i);
+			n = tedge_appendf(json, size, n, "%" PRId32, v->v.i);
 			break;
 		case TEDGE_PARAM_TYPE_STRING:
 		case TEDGE_PARAM_TYPE_ENUM:
@@ -435,7 +436,7 @@ static int check_declaration(const struct tedge_parameter *params, size_t count)
 				TEDGE_LOG_ERR("params: '%s': min above max", p->name);
 				return -EINVAL;
 			}
-			snprintf(raw, sizeof(raw), "%d", p->def.i);
+			snprintf(raw, sizeof(raw), "%" PRId32, p->def.i);
 			if (check_value(p, raw, reason, sizeof(reason)) != 0) {
 				TEDGE_LOG_ERR("params: default %s", reason);
 				return -EINVAL;

@@ -1,0 +1,10 @@
+# CI: the other authentication, and most features off, so what the core
+# leaves out (tedge_absent.c) must still link.
+CONFIG_TEDGE_AUTH_BOOTSTRAP=y
+CONFIG_TEDGE_C8Y_CORE_MQTT=y
+CONFIG_TEDGE_HEALTH=n
+CONFIG_TEDGE_RESTART=n
+CONFIG_TEDGE_FIRMWARE_UPDATE=n
+CONFIG_TEDGE_LOG_UPLOAD=n
+CONFIG_TEDGE_PARAMETERS=n
+CONFIG_TEDGE_C8Y_OPERATION_JSON=n
