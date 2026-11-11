@@ -72,12 +72,21 @@ static void wifi_start(void)
 						   on_wifi, NULL));
 	ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
 						   on_wifi, NULL));
-	strncpy((char *)cfg.sta.ssid, CONFIG_SAMPLE_WIFI_SSID,
-		sizeof(cfg.sta.ssid));
-	strncpy((char *)cfg.sta.password, CONFIG_SAMPLE_WIFI_PASSWORD,
-		sizeof(cfg.sta.password));
 	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &cfg));
+	if (CONFIG_SAMPLE_WIFI_SSID[0] != '\0') {
+		strncpy((char *)cfg.sta.ssid, CONFIG_SAMPLE_WIFI_SSID,
+			sizeof(cfg.sta.ssid));
+		strncpy((char *)cfg.sta.password, CONFIG_SAMPLE_WIFI_PASSWORD,
+			sizeof(cfg.sta.password));
+		/* ESP-IDF keeps it in NVS, for images built without one. */
+		ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &cfg));
+	} else if (esp_wifi_get_config(WIFI_IF_STA, &cfg) != ESP_OK ||
+		   cfg.sta.ssid[0] == '\0') {
+		ESP_LOGE(TAG, "no Wi-Fi network: set one in menuconfig "
+			 "(\"tiny-edge sample\")");
+	} else {
+		ESP_LOGI(TAG, "Wi-Fi: using the network stored on the device");
+	}
 	ESP_ERROR_CHECK(esp_wifi_start());
 }
 

@@ -103,6 +103,10 @@ idf.py menuconfig    # "tiny-edge sample": Wi-Fi; "tiny-edge": the tenant
 idf.py build flash monitor
 ```
 
+The sample keeps the Wi-Fi network on the device. An image built without
+one, such as an image for a firmware update, uses the stored network, so it
+carries no Wi-Fi password.
+
 On the first boot the sample logs a registration URL. Open it to register
 the device in Cumulocity. The key and certificate stay in NVS, so later
 boots connect at once.
@@ -124,12 +128,14 @@ only). The sample with every feature is 1.06 MB on the ESP32-C6, 61% of a
 
 Tested on an ESP32-C6 against a Cumulocity tenant: certificate enrollment
 from the registration URL, the MQTT connection, measurements, the health
-measurement, log upload, a remote access tunnel, and an operation
-interrupted by a reset (reported as failed after the reboot). Firmware
-update has not yet been tested on a board.
+measurement, log upload, a remote access tunnel, an operation
+interrupted by a reset (reported as failed after the reboot), parameter
+changes (kept across a reboot), and a firmware update from the tenant's
+firmware repository (the new image confirmed itself once connected). A
+firmware rollback has not yet been tested on a board.
 
 Each thread that runs a TLS handshake of its own (log upload, firmware
 download, remote access) has a 12 KB stack: the log upload used 8.1 KB on
-the ESP32-C6, more than with Zephyr's mbedTLS. With the log level at debug,
-each of these threads logs how much of its stack it never used when it
-ends.
+the ESP32-C6, more than with Zephyr's mbedTLS. In a build with
+`CONFIG_TEDGE_LOG_LEVEL=4` (debug), each thread logs how much of its stack
+it never used when it ends.
