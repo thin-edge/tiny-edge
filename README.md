@@ -12,7 +12,7 @@ so the client looks like a native library to the people who use that RTOS.
 | Port | Status | How you add it |
 |---|---|---|
 | [Zephyr](ports/zephyr/README.md) | Verified on ESP32-C6, ESP32-S3, and ESP32 | A Zephyr module: a west project, Kconfig, profiles |
-| [FreeRTOS](ports/freertos/README.md): ESP-IDF first | Builds for ESP32-C6, ESP32-S3, and ESP32; not yet run on a board | An ESP-IDF component with Kconfig; the FreeRTOS kernel layer is ready for other FreeRTOS platforms |
+| [FreeRTOS](ports/freertos/README.md): ESP-IDF first | Builds for ESP32-C6, ESP32-S3, and ESP32; tested on an ESP32-C6 | An ESP-IDF component with Kconfig; the FreeRTOS kernel layer is ready for other FreeRTOS platforms |
 | Eclipse ThreadX | Planned | CMake library with a user configuration header |
 | [POSIX](ports/posix/README.md): Linux and macOS hosts; QNX and VxWorks RTP later | Run against Cumulocity on macOS; builds and passes its tests on Linux and macOS | A CMake library with CMake options |
 
@@ -69,7 +69,7 @@ follows the RTOS's own conventions for:
 | Network and TLS | Zephyr sockets with TLS credentials | lwIP's BSD sockets with mbedTLS (shared with POSIX) | BSD sockets with mbedTLS | The RTOS's sockets with its usual TLS stack (mbedTLS, NetX Secure, OpenSSL) |
 | Persistent settings | Settings subsystem | NVS | A file per key | The RTOS's key-value store, or a file |
 | Firmware update | MCUboot | OTA partitions with the bootloader's rollback | Not yet | MCUboot, or the platform's own OTA mechanism |
-| Logging and shell | Zephyr logging and shell | `ESP_LOG`; no shell yet | Standard error | The RTOS's logging |
+| Logging and shell | Zephyr logging and shell | `ESP_LOG`, and `esp_console` commands for the cloud shell | Standard error | The RTOS's logging |
 
 The port interface sits at the transport level: a port provides a TLS byte
 stream, and the core speaks MQTT, HTTP, and WebSocket over it. One protocol

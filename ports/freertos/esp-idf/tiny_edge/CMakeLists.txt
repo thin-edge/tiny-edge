@@ -43,6 +43,9 @@ endif()
 if(CONFIG_TEDGE_FIRMWARE_UPDATE)
   list(APPEND _srcs src/tedge_port_fw.c)
 endif()
+if(CONFIG_TEDGE_SHELL_COMMAND)
+  list(APPEND _srcs src/tedge_shell_cmd.c)
+endif()
 
 idf_component_register(
   SRCS ${_srcs}
@@ -52,7 +55,7 @@ idf_component_register(
   PRIV_INCLUDE_DIRS ${TEDGE_ROOT}/core/src ${TEDGE_COMMON_DIR}/include
   REQUIRES freertos log mbedtls
   PRIV_REQUIRES esp_netif esp_event esp_wifi esp_app_format app_update
-    esp_hw_support esp_system nvs_flash lwip
+    esp_hw_support esp_system nvs_flash lwip console
   # The log capture registers itself in a constructor, which nothing
   # references by name.
   WHOLE_ARCHIVE

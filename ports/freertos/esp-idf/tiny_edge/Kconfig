@@ -189,6 +189,59 @@ config TEDGE_FIRMWARE_PROGRESS_PERCENT
 
 endif # TEDGE_FIRMWARE_UPDATE
 
+config TEDGE_SHELL_COMMAND
+	bool "Shell command operation (c8y_Command)"
+	default y
+	help
+	  Runs an allow-listed ESP-IDF console command (esp_console) sent
+	  from the cloud, and returns what it printed. The command runs in
+	  the client, not in a shell on the network. The application
+	  registers its commands with esp_console_cmd_register(), and nothing
+	  runs until TEDGE_SHELL_COMMAND_ALLOW_LIST says what may.
+
+if TEDGE_SHELL_COMMAND
+
+config TEDGE_SHELL_COMMAND_ALLOW_LIST
+	string "Commands the cloud may run (comma-separated prefixes)"
+	default ""
+	help
+	  For example "free,version". A request must begin with one of
+	  these and may add arguments; anything that could chain a second
+	  command is refused whatever this says.
+
+	  Empty, the default, refuses every command: compiling the feature in
+	  is not the same as consenting to run something. What is safe to
+	  expose depends on the commands the image registers, which only you
+	  know.
+
+config TEDGE_SHELL_COMMAND_TIMEOUT_S
+	int "Seconds before a command is reported as timed out"
+	default 30
+	range 1 600
+	help
+	  A running console command cannot be interrupted, so the operation
+	  fails but the thread stays busy until the command returns. Keep
+	  commands that can block for ever off the allow-list.
+
+config TEDGE_SHELL_COMMAND_OUTPUT_BYTES
+	int "Output kept from a command (bytes)"
+	default 512
+	range 64 4096
+	help
+	  What the command printed, as far as this many bytes. The result
+	  reported to Cumulocity is one SmartREST field and is shorter still;
+	  a command with a lot to say belongs behind a log type.
+
+config TEDGE_SHELL_COMMAND_STACK_SIZE
+	int "Stack of the thread a command runs on (bytes)"
+	default 4096
+	help
+	  The command runs on this thread. The sample's commands, which
+	  print with printf, used 1.2 KB of it on an ESP32-C6; a command that
+	  needs more stack needs a larger value.
+
+endif # TEDGE_SHELL_COMMAND
+
 config TEDGE_LOG_UPLOAD
 	bool "Log upload"
 	default y

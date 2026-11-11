@@ -18,6 +18,11 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <nvs_flash.h>
+#if CONFIG_TEDGE_SHELL_COMMAND
+#include <esp_console.h>
+#include <esp_heap_caps.h>
+#include <esp_app_desc.h>
+#endif
 
 #include <string.h>
 
@@ -90,6 +95,59 @@ static void wifi_start(void)
 	ESP_ERROR_CHECK(esp_wifi_start());
 }
 
+#if CONFIG_TEDGE_SHELL_COMMAND
+/* Commands the cloud can run (c8y_Command), once they are on
+ * CONFIG_TEDGE_SHELL_COMMAND_ALLOW_LIST. What they print is the result. */
+static int cmd_free(int argc, char **argv)
+{
+	(void)argc;
+	(void)argv;
+	printf("heap: %u bytes free, %u at the lowest\n",
+	       (unsigned int)esp_get_free_heap_size(),
+	       (unsigned int)esp_get_minimum_free_heap_size());
+	printf("largest free block: %u bytes\n",
+	       (unsigned int)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+	return 0;
+}
+
+static int cmd_version(int argc, char **argv)
+{
+	const esp_app_desc_t *app = esp_app_get_description();
+
+	(void)argc;
+	(void)argv;
+	printf("%s %s, tiny-edge %s, ESP-IDF %s\n", app->project_name,
+	       app->version, tedge_version(), app->idf_ver);
+	return 0;
+}
+
+static int cmd_uptime(int argc, char **argv)
+{
+	(void)argc;
+	(void)argv;
+	printf("%lu s\n", (unsigned long)(xTaskGetTickCount() /
+					  configTICK_RATE_HZ));
+	return 0;
+}
+
+static void commands_register(void)
+{
+	static const esp_console_cmd_t cmds[] = {
+		{ .command = "free", .help = "Free heap", .func = cmd_free },
+		{ .command = "version", .help = "Firmware and library versions",
+		  .func = cmd_version },
+		{ .command = "uptime", .help = "Seconds since the start",
+		  .func = cmd_uptime },
+	};
+	esp_console_config_t cfg = ESP_CONSOLE_CONFIG_DEFAULT();
+
+	ESP_ERROR_CHECK(esp_console_init(&cfg));
+	for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
+		ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
+	}
+}
+#endif
+
 void app_main(void)
 {
 	esp_err_t e = nvs_flash_init();
@@ -105,6 +163,9 @@ void app_main(void)
 	ESP_ERROR_CHECK(esp_event_loop_create_default());
 	wifi_start();
 
+#if CONFIG_TEDGE_SHELL_COMMAND
+	commands_register();
+#endif
 	ESP_LOGI(TAG, "tiny-edge %s", tedge_version());
 	if (tedge_init(NULL, &hooks) != 0 || tedge_start() != 0) {
 		ESP_LOGE(TAG, "the client did not start");

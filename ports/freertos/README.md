@@ -91,6 +91,24 @@ writing for enrollment.
 | Firmware update | `esp_ota_*` with the bootloader's rollback |
 | Logging | `ESP_LOG`, tag `tedge`. With log upload, every line the image logs is also kept for upload, cut at 127 bytes |
 | Device id | `tedge` and the MAC of the default interface |
+| Shell commands (`c8y_Command`) | The application's `esp_console` commands, run with `esp_console_run()` on a thread of their own. What the command's task prints to stdout is the result |
+
+## Shell commands
+
+The cloud's shell (`c8y_Command`) runs the application's own console
+commands, the ones it registers with `esp_console_cmd_register()`. Nothing
+runs until `CONFIG_TEDGE_SHELL_COMMAND_ALLOW_LIST` names what may, for
+example `"free,version"`: a command must begin with one of those, and
+anything that could chain a second command is refused. `help` answers with
+the list.
+
+The result is what the command printed. While a command runs, stdout keeps
+only what the command's task prints and passes everything else on to the
+console. A command that does not return within
+`CONFIG_TEDGE_SHELL_COMMAND_TIMEOUT_S` is reported as failed, but keeps its
+thread until it returns, so keep commands that can block off the list.
+
+The sample registers `free`, `version`, and `uptime`, and allows those three.
 
 ## Build the sample
 
@@ -113,7 +131,6 @@ boots connect at once.
 
 ## Not in this port yet
 
-- Cloud shell commands (`c8y_Command`): ESP-IDF's console would run them.
 - Crash dumps: ESP-IDF's core dump partition would be offered as a log type.
 - The provisioning library (Improv over serial or BLE).
 - Plain FreeRTOS builds outside ESP-IDF: the kernel layer is ready, but no
@@ -130,12 +147,15 @@ Tested on an ESP32-C6 against a Cumulocity tenant: certificate enrollment
 from the registration URL, the MQTT connection, measurements, the health
 measurement, log upload, a remote access tunnel, an operation
 interrupted by a reset (reported as failed after the reboot), parameter
-changes (kept across a reboot), and a firmware update from the tenant's
-firmware repository (the new image confirmed itself once connected). A
-firmware rollback has not yet been tested on a board.
+changes (kept across a reboot), shell commands, a firmware update from the
+tenant's firmware repository (the new image confirmed itself once
+connected), and a rollback (an image that never connected was reset after
+its confirmation deadline, and the bootloader went back to the previous
+one, which reported the update as failed).
 
 Each thread that runs a TLS handshake of its own (log upload, firmware
 download, remote access) has a 12 KB stack: the log upload used 8.1 KB on
 the ESP32-C6, more than with Zephyr's mbedTLS. In a build with
-`CONFIG_TEDGE_LOG_LEVEL=4` (debug), each thread logs how much of its stack
-it never used when it ends.
+`CONFIG_TEDGE_LOG_LEVEL=4` and `CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y` (ESP-IDF
+leaves out debug lines otherwise), and the client's `log_level` parameter at
+`dbg`, each thread logs how much of its stack it never used when it ends.
