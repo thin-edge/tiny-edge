@@ -13,6 +13,9 @@ Rules:
    shares, so they may only use C, the client's own headers and the port
    interface.
 2. A port never reaches into another port (ports/<a> must not name ports/<b>).
+   ports/common/ is not a port: it is code for platforms with BSD sockets and
+   mbedTLS, which any port may build. It names no port, and is held to rule
+   1 as well, since several RTOSes share it.
 3. Nothing reaches outside the repository with "../" paths.
 
 Documentation (*.md) is not checked.
@@ -57,8 +60,13 @@ def is_code(path: Path) -> bool:
         or path.suffix in CODE_SUFFIXES
 
 
+# Shared by the ports, not one of them.
+COMMON = "common"
+
+
 def is_portable(rel: str) -> bool:
-    return rel.startswith(("core/", "provisioning/", "include/tedge/port/")) \
+    return rel.startswith(("core/", "provisioning/", "include/tedge/port/",
+                           f"ports/{COMMON}/")) \
         or rel in ("include/tedge/tedge.h", "include/tedge/provisioning.h")
 
 
@@ -89,7 +97,8 @@ def check_file(path: Path) -> list[str]:
         own = rel.split("/")[1]
         for lineno, line in enumerate(text.splitlines(), start=1):
             for match in PORT_REF.finditer(line):
-                if match.group(1) != own:
+                if match.group(1) != own and (match.group(1) != COMMON
+                                              or own == COMMON):
                     problems.append(f"{rel}:{lineno}: port '{own}' refers to "
                                     f"port '{match.group(1)}'")
 
