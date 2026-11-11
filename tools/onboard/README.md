@@ -40,6 +40,26 @@ opened because the developer cannot be verified". Open **System Settings**,
 then **Privacy & Security**, and select **Open Anyway** next to the
 message about `tedge-onboard`.
 
+**On Linux**, your user needs permission to use USB serial ports. Most
+distributions give it to the `dialout` group (`uucp` on Arch Linux). To
+check, run `groups` in Terminal. If the group isn't listed, add yourself
+to it, then log out and back in:
+
+```sh
+sudo usermod -aG dialout "$USER"
+```
+
+The tool reads the Wi-Fi network through NetworkManager (`nmcli`). On a
+computer without it, the tool asks you for the network and its password.
+
+**On Windows**, devices with a built-in USB port, such as the ESP32-C6
+and ESP32-S3, work without extra drivers on Windows 10 and later. Boards
+with a separate USB chip, which includes most classic ESP32 boards, may
+need its driver first: the
+[CP210x driver](https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers)
+or the [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html).
+The chip's name is usually printed on it, next to the USB socket.
+
 ## Set up a device
 
 1. Plug the device into your computer with the USB cable.
@@ -81,7 +101,7 @@ which the device uses once to get its certificate.
 
 | What you see | What to do |
 |---|---|
-| No device was found | Check the cable is a data cable, and plug it in again. Try another USB port. |
+| No device was found | Check the cable is a data cable, and plug it in again. Try another USB port. On Linux, check that your user can use serial ports. On Windows, check that the board's USB driver is installed (see [Download](#download)). |
 | The firmware cannot be set up this way | The device needs firmware with tiny-edge's provisioning library. |
 | The device could not join the Wi-Fi network | Check the password. Make sure the network is 2.4 GHz and the device is in range. |
 | The device did not connect in time | Check that the Wi-Fi network reaches the internet. The device keeps trying, so it may still appear in Cumulocity a few minutes later. |
