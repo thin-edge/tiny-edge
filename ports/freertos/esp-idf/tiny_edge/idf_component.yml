@@ -1,0 +1,5 @@
+description: "tiny-edge: the thin-edge.io client for Cumulocity, on ESP-IDF (FreeRTOS)"
+url: "https://github.com/thin-edge/tiny-edge"
+license: "Apache-2.0"
+dependencies:
+  idf: ">=6.1"

@@ -12,7 +12,7 @@ so the client looks like a native library to the people who use that RTOS.
 | Port | Status | How you add it |
 |---|---|---|
 | [Zephyr](ports/zephyr/README.md) | Verified on ESP32-C6, ESP32-S3, and ESP32 | A Zephyr module: a west project, Kconfig, profiles |
-| FreeRTOS (ESP-IDF first) | Planned | An ESP-IDF component; plain CMake for other FreeRTOS builds |
+| [FreeRTOS](ports/freertos/README.md): ESP-IDF first | Builds for ESP32-C6, ESP32-S3, and ESP32; tested on an ESP32-C6 | An ESP-IDF component with Kconfig; the FreeRTOS kernel layer is ready for other FreeRTOS platforms |
 | Eclipse ThreadX | Planned | CMake library with a user configuration header |
 | [POSIX](ports/posix/README.md): Linux and macOS hosts; QNX and VxWorks RTP later | Run against Cumulocity on macOS; builds and passes its tests on Linux and macOS | A CMake library with CMake options |
 
@@ -33,7 +33,11 @@ tiny-edge/
 ├── ports/
 │   ├── zephyr/          build glue, Kconfig, profiles, samples, tests, and the
 │   │                    Zephyr-only sources
-│   └── posix/           CMake library, options, sample, and tests
+│   ├── freertos/        FreeRTOS kernel layer, and esp-idf/: the ESP-IDF
+│   │                    component (tiny_edge) and its sample
+│   ├── posix/           CMake library, options, sample, and tests
+│   └── common/          not a port: BSD sockets with mbedTLS, and the device
+│                        key, shared by the POSIX and ESP-IDF ports
 ├── provisioning/        optional library: set a device up over Improv Wi-Fi
 │                        (include/tedge/provisioning.h)
 ├── tools/onboard/       tedge-onboard: set a device up from a computer
@@ -57,15 +61,15 @@ configuration header, so the core builds the same way everywhere.
 **`ports/<rtos>/`** holds what does depend on the RTOS. A port is small and
 follows the RTOS's own conventions for:
 
-| Concern | Zephyr port | POSIX port | Other ports |
-|---|---|---|---|
-| Packaging | Zephyr module, west project | CMake library | The RTOS's component or library format |
-| Configuration | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | CMake options `TEDGE_*` | `tedge_user_config.h`, in the style of `FreeRTOSConfig.h` and `tx_user.h` (ESP-IDF uses Kconfig) |
-| Threads and locks | `k_thread`, `k_mutex`, work queues | pthreads | The RTOS's task and mutex API |
-| Network and TLS | Zephyr sockets with TLS credentials | BSD sockets with mbedTLS | The RTOS's sockets with its usual TLS stack (mbedTLS, NetX Secure, OpenSSL) |
-| Persistent settings | Settings subsystem | A file per key | NVS, a file, or the RTOS's key-value store |
-| Firmware update | MCUboot | Not yet | MCUboot, or the platform's own OTA mechanism |
-| Logging and shell | Zephyr logging and shell | Standard error | The RTOS's logging |
+| Concern | Zephyr port | FreeRTOS port (ESP-IDF) | POSIX port | Other ports |
+|---|---|---|---|---|
+| Packaging | Zephyr module, west project | ESP-IDF component | CMake library | The RTOS's component or library format |
+| Configuration | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | CMake options `TEDGE_*` | `tedge_user_config.h`, in the style of `FreeRTOSConfig.h` and `tx_user.h` |
+| Threads and locks | `k_thread`, `k_mutex`, work queues | Static FreeRTOS tasks, semaphores, event groups, software timers | pthreads | The RTOS's task and mutex API |
+| Network and TLS | Zephyr sockets with TLS credentials | lwIP's BSD sockets with mbedTLS (shared with POSIX) | BSD sockets with mbedTLS | The RTOS's sockets with its usual TLS stack (mbedTLS, NetX Secure, OpenSSL) |
+| Persistent settings | Settings subsystem | NVS | A file per key | The RTOS's key-value store, or a file |
+| Firmware update | MCUboot | OTA partitions with the bootloader's rollback | Not yet | MCUboot, or the platform's own OTA mechanism |
+| Logging and shell | Zephyr logging and shell | `ESP_LOG`, and `esp_console` commands for the cloud shell | Standard error | The RTOS's logging |
 
 The port interface sits at the transport level: a port provides a TLS byte
 stream, and the core speaks MQTT, HTTP, and WebSocket over it. One protocol

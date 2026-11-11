@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The FreeRTOS port on ESP-IDF: the sample built for a RISC-V and two Xtensa
+# chips with every feature, and once with most features off.
+name: freertos
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  esp-idf:
+    name: ESP-IDF, ${{ matrix.target }}, ${{ matrix.features }}
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v6.1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: esp32c6
+            features: all
+          - target: esp32s3
+            features: all
+          - target: esp32
+            features: all
+          - target: esp32c6
+            features: small
+    defaults:
+      run:
+        shell: bash
+        working-directory: ports/freertos/esp-idf/samples/minimal
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          . $IDF_PATH/export.sh
+          defaults="sdkconfig.defaults"
+          if [ "${{ matrix.features }}" = small ]; then
+            defaults="$defaults;sdkconfig.ci.small"
+          fi
+          idf.py -D IDF_TARGET=${{ matrix.target }} \
+            -D "SDKCONFIG_DEFAULTS=$defaults" build

@@ -1,0 +1,19 @@
+menu "tiny-edge sample"
+
+config SAMPLE_WIFI_SSID
+	string "Wi-Fi network (SSID)"
+	default ""
+	help
+	  Stored on the device when it starts. An image built without one
+	  (for a firmware update, say) uses the network stored there, so the
+	  image carries no Wi-Fi password.
+
+config SAMPLE_WIFI_PASSWORD
+	string "Wi-Fi password"
+	default ""
+
+config SAMPLE_MEASUREMENT_INTERVAL_S
+	int "Seconds between measurements"
+	default 60
+
+endmenu

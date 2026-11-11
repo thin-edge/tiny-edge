@@ -30,6 +30,7 @@
 #include <mbedtls/x509_crt.h>
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -113,7 +114,7 @@ int tedge_cert_twin(char *buf, size_t len)
 	strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", &tm);
 	return (snprintf(buf, len,
 			 "{\"expires\":\"%s\",\"daysRemaining\":%d,"
-			 "\"renewals\":%u}",
+			 "\"renewals\":%" PRIu32 "}",
 			 iso, days, renewals) < (int)len)
 		       ? 0
 		       : -ENOSPC;

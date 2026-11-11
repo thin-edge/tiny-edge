@@ -49,6 +49,9 @@ add_library(tedge STATIC
   src/tedge_port_kv.c
   src/tedge_port_net.c
   src/tedge_port_crypto.c
+  # Shared with other ports that have BSD sockets and mbedTLS.
+  ${TEDGE_ROOT}/ports/common/src/tedge_sockets.c
+  ${TEDGE_ROOT}/ports/common/src/tedge_mbedtls_key.c
 )
 add_library(tedge::tedge ALIAS tedge)
 
@@ -74,30 +77,17 @@ target_include_directories(tedge PUBLIC
 )
 target_include_directories(tedge PRIVATE
   ${TEDGE_ROOT}/core/src
+  ${TEDGE_ROOT}/ports/common/include
   ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 target_link_libraries(tedge PUBLIC ${TEDGE_MBEDTLS_LIBRARIES} Threads::Threads)
 
 tedge_generate_config(${CMAKE_CURRENT_BINARY_DIR}/generated)
 
-# Trust anchors: every PEM in TEDGE_C8Y_CA_FILES, concatenated and embedded
-# as tedge_ca_bundle.inc (comma-separated bytes), as the Zephyr port does.
-separate_arguments(_ca_files UNIX_COMMAND "${TEDGE_C8Y_CA_FILES}")
-set(_bundle "")
-foreach(_pem ${_ca_files})
-  if(NOT IS_ABSOLUTE ${_pem})
-    set(_pem ${TEDGE_ROOT}/${_pem})
-  endif()
-  if(NOT EXISTS ${_pem})
-    message(FATAL_ERROR "TEDGE_C8Y_CA_FILES: no such file: ${_pem}")
-  endif()
-  file(READ ${_pem} _content HEX)
-  string(APPEND _bundle "${_content}")
-  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_pem})
-endforeach()
-string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," _bundle "${_bundle}")
-file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/tedge_ca_bundle.inc
-  CONTENT "${_bundle}\n")
+# Trust anchors: every PEM in TEDGE_C8Y_CA_FILES, embedded as
+# tedge_ca_bundle.inc, as the other ports do.
+include(${TEDGE_ROOT}/ports/common/cmake/tedge_ca_bundle.cmake)
+tedge_ca_bundle(${CMAKE_CURRENT_BINARY_DIR}/generated "${TEDGE_C8Y_CA_FILES}")
 
 if(TEDGE_POSIX_SAMPLES)
   add_subdirectory(samples/minimal)
