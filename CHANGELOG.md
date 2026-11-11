@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/thin-edge/tiny-edge/compare/v0.3.0...v0.4.0) (2026-11-11)
+
+
+### Features
+
+* build sample images without Wi-Fi credentials ([1bbb0e0](https://github.com/thin-edge/tiny-edge/commit/1bbb0e0c65ef59bbb2420702faec0cb34b828b52))
+* FreeRTOS port, with ESP-IDF as its first platform ([57be8e1](https://github.com/thin-edge/tiny-edge/commit/57be8e15ead6cb266baf2fc243609ea17634671c))
+* FreeRTOS port, with ESP-IDF as its first platform ([573007b](https://github.com/thin-edge/tiny-edge/commit/573007b138c70212ac0e02fde5f951e8ffbbd03e))
+* run cloud shell commands (c8y_Command) on ESP-IDF ([a54ba1f](https://github.com/thin-edge/tiny-edge/commit/a54ba1f6470be58688eb2b3caf531c96c7789333))
+
+
+### Bug Fixes
+
+* report an operation interrupted by a reset as failed ([5282034](https://github.com/thin-edge/tiny-edge/commit/5282034180c22f71275e5f135ed101c1bcc9f05f))
+* report an operation interrupted by a reset as failed ([e822b4d](https://github.com/thin-edge/tiny-edge/commit/e822b4d0378bb069439b3d5cbb19a1a458254313))
+
 ## [0.3.0](https://github.com/thin-edge/tiny-edge/compare/v0.2.0...v0.3.0) (2026-11-10)
 
 
