@@ -1,4 +1,4 @@
-// Cumulocity Smart Function: tedge-zephyr events -> Cumulocity events.
+// Cumulocity Smart Function: tiny-edge events -> Cumulocity events.
 //
 // Topic: te/device/*///e/*
 //

@@ -1,4 +1,4 @@
-// Cumulocity Smart Function: tedge-zephyr measurements -> Cumulocity measurements.
+// Cumulocity Smart Function: tiny-edge measurements -> Cumulocity measurements.
 //
 // Topic: te/device/*///m/*
 //

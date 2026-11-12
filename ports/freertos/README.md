@@ -91,6 +91,7 @@ writing for enrollment.
 | Firmware update | `esp_ota_*` with the bootloader's rollback |
 | Logging | `ESP_LOG`, tag `tedge`. With log upload, every line the image logs is also kept for upload, cut at 127 bytes |
 | Device id | `tedge` and the MAC of the default interface |
+| What it runs on (`tedge_OS`, `c8y_Hardware`) | `freertos` with the kernel's version, the platform `esp-idf` with its version, and the chip: `CONFIG_IDF_TARGET` as the model, the chip revision, and the MAC as the serial number |
 | Provisioning (`tedge-onboard`) | Improv Serial on the UART and USB Serial/JTAG consoles, and Wi-Fi with `esp_wifi` |
 | Shell commands (`c8y_Command`) | The application's `esp_console` commands, run with `esp_console_run()` on a thread of their own. What the command's task prints to stdout is the result |
 

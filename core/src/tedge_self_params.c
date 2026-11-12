@@ -32,14 +32,14 @@
 
 TEDGE_LOG_DECLARE();
 
-#define SELF_SET "zephyr_tedge"
+#define SELF_SET "tiny_edge"
 /* remote_access is a set of its own, declared only when remote access is
  * built. The Parameters tab sends a whole set on every change, and a device
  * refuses a name it does not declare, so a remote_access field in the main
  * set made every change fail on an image without remote access (seen on the
  * WROOM and the ESP32-CAM, 2026-09-23). Each set's definition now lists
  * exactly what every device declaring the set accepts. */
-#define RA_SET "zephyr_tedge_remote_access"
+#define RA_SET "tiny_edge_remote_access"
 
 /* The severities, lowest first, so the index is the level
  * (enum tedge_log_level). */

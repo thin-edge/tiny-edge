@@ -9,12 +9,19 @@
 #include <tedge/port/os.h>
 
 #include <esp_app_desc.h>
+#include <esp_chip_info.h>
+#include <esp_idf_version.h>
 #include <esp_mac.h>
 #include <esp_netif.h>
 #include <esp_random.h>
 #include <esp_system.h>
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <sdkconfig.h>
+
 #include <errno.h>
+#include <stdio.h>
 
 /* --- The device ---------------------------------------------------------- */
 
@@ -50,6 +57,27 @@ const char *tedge_port_firmware_name(void)
 const char *tedge_port_firmware_version(void)
 {
 	return esp_app_get_description()->version;
+}
+
+/* FreeRTOS under ESP-IDF, and the chip: the target's name, and the revision
+ * the chip reports (esp_chip_info()'s major * 100 + minor). */
+void tedge_port_platform(struct tedge_port_platform *out)
+{
+	static char sdk[32];
+	static char revision[16];
+	static const char kernel[] = tskKERNEL_VERSION_NUMBER;
+	esp_chip_info_t chip;
+
+	esp_chip_info(&chip);
+	snprintf(revision, sizeof(revision), "v%u.%u",
+		 (unsigned)(chip.revision / 100), (unsigned)(chip.revision % 100));
+	snprintf(sdk, sizeof(sdk), "esp-idf %s", esp_get_idf_version());
+	out->os = "freertos";
+	/* "V11.1.0" -> "11.1.0", as the other ports state versions. */
+	out->os_version = (kernel[0] == 'V') ? kernel + 1 : kernel;
+	out->sdk = sdk;
+	out->model = CONFIG_IDF_TARGET;
+	out->revision = revision;
 }
 
 /* esp_restart() stops Wi-Fi and the other radios before a full-system

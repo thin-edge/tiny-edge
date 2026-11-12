@@ -1,0 +1,6 @@
+smartFunctionFile: measurements.js
+description: "tiny-edge measurements (pump, server, agent, device, tedge_health) to Cumulocity measurements"
+tags: [tiny-edge, measurement]
+input:
+  transport: mqtt
+  topicPattern: "te/device/*///m/*"

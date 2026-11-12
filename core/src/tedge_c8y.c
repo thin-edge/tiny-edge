@@ -13,6 +13,7 @@
 #include "tedge_mqtt.h"
 #include "tedge_util.h"
 
+#include <tedge/port/device.h>
 #include <tedge/port/kv.h>
 #include <tedge/port/log.h>
 #include <tedge/port/net.h>
@@ -1002,11 +1003,88 @@ static void publish_health(void)
 		return;
 	}
 	(void)tedge_port_time_now(&now);
-	snprintf(topic, sizeof(topic), "te/device/%s/service/tedge-zephyr/status/health",
+	snprintf(topic, sizeof(topic),
+		 "te/device/%s/service/" TEDGE_SERVICE_NAME "/status/health",
 		 device_id);
 	snprintf(body, sizeof(body), "{\"status\":\"up\",\"time\":%lld}",
 		 (long long)now);
 	(void)publish(topic, body, QOS_1);
+}
+
+/* Appends "<key>":"<value>" to a JSON object being built (n > 1 once it has
+ * a member), unless the value is empty. */
+static size_t append_str(char *buf, size_t cap, size_t n, const char *key,
+			 const char *value)
+{
+	char esc[96];
+
+	if (value == NULL || value[0] == '\0') {
+		return n;
+	}
+	tedge_json_escape(value, esc, sizeof(esc));
+	return tedge_appendf(buf, cap, n, "%s\"%s\":\"%s\"",
+			     (n > 1) ? "," : "", key, esc);
+}
+
+/* Twin data like c8y_Hardware: Cumulocity's c8y_Agent (the client),
+ * tedge_OS (what the device runs on), and tedge_Agent (the one thing
+ * Cumulocity's fragments have no field for: the transport). The firmware is
+ * c8y_Firmware (SmartREST 115). */
+static void publish_agent(void)
+{
+	const struct tedge_port_platform *p = tedge_platform();
+	char buf[192];
+	size_t n = 1;
+
+	buf[0] = '{';
+	n = append_str(buf, sizeof(buf), n, "name", TEDGE_SERVICE_NAME);
+	n = append_str(buf, sizeof(buf), n, "version", tedge_version());
+	n = append_str(buf, sizeof(buf), n, "url", TEDGE_AGENT_URL);
+	n = append_str(buf, sizeof(buf), n, "maintainer",
+		       TEDGE_AGENT_MAINTAINER);
+	n = tedge_appendf(buf, sizeof(buf), n, "}");
+	if (n < sizeof(buf)) {
+		(void)publish_twin_impl("c8y_Agent", buf);
+	}
+
+	n = 1;
+	n = append_str(buf, sizeof(buf), n, "name", p->os);
+	n = append_str(buf, sizeof(buf), n, "version", p->os_version);
+	n = append_str(buf, sizeof(buf), n, "platform", p->sdk);
+	if (n > 1) {
+		n = tedge_appendf(buf, sizeof(buf), n, "}");
+		if (n < sizeof(buf)) {
+			(void)publish_twin_impl("tedge_OS", buf);
+		}
+	}
+
+	n = 1;
+	n = append_str(buf, sizeof(buf), n, "transport",
+		       FREE_FORM_TOPICS ? "c8y-mqtt-service" : "c8y-core-mqtt");
+	n = tedge_appendf(buf, sizeof(buf), n, "}");
+	if (n < sizeof(buf)) {
+		(void)publish_twin_impl("tedge_Agent", buf);
+	}
+}
+
+/* Cumulocity's hardware fragment: model, revision, and serial number. On
+ * the MQTT service the twin smart function writes it under the same name;
+ * on Core MQTT it is an inventory update. Nothing when nothing is known. */
+static void publish_hardware(const struct tedge_id *id)
+{
+	char hw[160];
+	size_t n = 1;
+
+	hw[0] = '{';
+	n = append_str(hw, sizeof(hw), n, "model", id->hardware_model);
+	n = append_str(hw, sizeof(hw), n, "revision", id->hardware_revision);
+	n = append_str(hw, sizeof(hw), n, "serialNumber", id->serial_number);
+	if (n > 1) {
+		n = tedge_appendf(hw, sizeof(hw), n, "}");
+		if (n < sizeof(hw)) {
+			(void)publish_twin_impl("c8y_Hardware", hw);
+		}
+	}
 }
 
 /* 100, subscriptions, 114, 117, s/uat, then state (design D6). */
@@ -1019,7 +1097,6 @@ static int session_start(void)
 
 	const struct tedge_id *id = tedge_identity();
 	char line[160];
-	char agent[192];
 
 	snprintf(line, sizeof(line), "100,%s,%s", id->name, id->type);
 	(void)tedge_c8y_publish_sr(line);
@@ -1062,27 +1139,29 @@ static int session_start(void)
 		(void)publish("s/uat", "", QOS_0);
 	}
 
-#if defined(TEDGE_FIRMWARE_UPDATE)
+	/* c8y_Firmware, in every build: the running image's name and version.
+	 * With firmware update, the version the bootloader reports. */
 	{
 		char ver[TEDGE_FW_VERSION_SIZE] = "";
 		char fw[96];
 
-		if (tedge_fw_running_version(ver, sizeof(ver)) == 0) {
+#if defined(TEDGE_FIRMWARE_UPDATE)
+		if (tedge_fw_running_version(ver, sizeof(ver)) != 0) {
+			TEDGE_LOG_WRN("firmware: cannot read the running version");
+			ver[0] = '\0';
+		}
+#else
+		snprintf(ver, sizeof(ver), "%s", id->firmware_version);
+#endif
+		if (ver[0] != '\0') {
 			TEDGE_LOG_INF("firmware: running %s %s", id->firmware_name, ver);
 			snprintf(fw, sizeof(fw), "115,%s,%s", id->firmware_name,
 				 ver);
 			(void)tedge_c8y_publish_sr(fw);
-		} else {
-			TEDGE_LOG_WRN("firmware: cannot read the running version");
 		}
 	}
-#endif
-	snprintf(agent, sizeof(agent),
-		 "{\"name\":\"tedge-zephyr\",\"version\":\"%s\","
-		 "\"transport\":\"%s\",\"firmware\":\"%s %s\"}",
-		 tedge_version(), FREE_FORM_TOPICS ? "c8y-mqtt-service" : "c8y-core-mqtt",
-		 id->firmware_name, id->firmware_version);
-	(void)publish_twin_impl("tedge_Agent", agent);
+	publish_agent();
+	publish_hardware(id);
 #if defined(TEDGE_REMOTE_ACCESS)
 	{
 		char ra[224];

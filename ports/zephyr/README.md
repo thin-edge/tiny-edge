@@ -129,9 +129,12 @@ MQTT the same values go out as direct inventory updates instead.
 
 | Topic | Payload | Meaning |
 |---|---|---|
-| `te/device/<id>///twin/tedge_Agent` | `{"name":"tedge-zephyr","version":"0.0.1","transport":"c8y-mqtt-service","firmware":"<name> <version>"}` | which client and firmware the device runs |
+| `te/device/<id>///twin/tedge_OS` | `{"name":"zephyr","version":"4.4.2"}` | the operating system. ESP-IDF sends `{"name":"freertos","version":"10.5.1","platform":"esp-idf v6.1"}` |
+| `te/device/<id>///twin/tedge_Agent` | `{"transport":"c8y-mqtt-service"}` | how the client connects. The firmware is in `c8y_Firmware` (SmartREST 115), in every build |
+| `te/device/<id>///twin/c8y_Agent` | `{"name":"tiny-edge","version":"<client version>","url":"https://github.com/thin-edge/tiny-edge","maintainer":"thin-edge.io"}` | Cumulocity's agent fragment |
+| `te/device/<id>///twin/c8y_Hardware` | `{"model":"esp32c6_devkitc","serialNumber":"e8f60afb8198"}` | Cumulocity's hardware fragment: the board (`CONFIG_BOARD`), its revision when it has one, and the MAC address. `struct tedge_identity` names its own |
 | `te/device/<id>///twin/tedge_RemoteAccess` | `{"maxSessions":1,"activeSessions":0,"freeSessions":1,"policy":"lan","sessions":[]}` | remote-access capacity, published on every connect and whenever a session opens or ends |
-| `te/device/<id>/service/tedge-zephyr/status/health` | `{"status":"up","time":<unix seconds>}` | the client is connected |
+| `te/device/<id>/service/tiny-edge/status/health` | `{"status":"up","time":<unix seconds>}` | the client is connected |
 
 Telemetry from `tedge_publish_measurement()`, `tedge_publish_event()` and
 `tedge_raise_alarm()` uses the same `te/` topics:
@@ -384,7 +387,7 @@ fragment, all three. That is also how one device offers more than one set.
 Because the identifier is global in the tenant's Digital Twin Manager, give
 a real set a name no one else will pick: this repository's applications
 prefix theirs with the device type (`zephyr_modbus_telemetry`,
-`zephyr_modbus_control`), and the client's own set is `zephyr_tedge`. A name
+`zephyr_modbus_control`), and the client's own sets are `tiny_edge` and `tiny_edge_remote_access`. A name
 is at most 39 characters.
 
 **What the cloud sees.** On every connect, and after every accepted change,
@@ -458,7 +461,7 @@ structure should encode it in a string and own the parsing.
 #### The client's own set
 
 With `CONFIG_TEDGE_PARAMETERS_SELF` (on by default) the client declares a
-set of its own, named `zephyr_tedge`, so a device can be adjusted in the
+set of its own, named `tiny_edge`, so a device can be adjusted in the
 field whether or not your application declares anything:
 
 | Parameter | Type | What it changes |
@@ -466,7 +469,7 @@ field whether or not your application declares anything:
 | `log_level` | enum | how much the client logs — `off`, `err`, `wrn`, `inf`, `dbg` |
 | `health_interval_s` | int | seconds between its own health measurements, 0 to stop them |
 | `required_interval_min` | int | minutes of silence after which Cumulocity calls the device offline — but see the note below |
-| `remote_access` | bool | whether the cloud may open a tunnel at all; a set of its own, `zephyr_tedge_remote_access` |
+| `remote_access` | bool | whether the cloud may open a tunnel at all; a set of its own, `tiny_edge_remote_access` |
 
 Each one is present only if the feature behind it is built in: no health,
 no `health_interval_s`. `remote_access` is declared as a separate set, only

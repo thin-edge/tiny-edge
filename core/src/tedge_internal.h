@@ -35,7 +35,21 @@ struct tedge_id {
 	char type[48];
 	char firmware_name[48];
 	char firmware_version[TEDGE_FW_VERSION_SIZE];
+	char hardware_model[48];
+	char hardware_revision[24];
+	char serial_number[32];
 };
+
+/** The client's name in the cloud: its service and its tedge_Agent. */
+#define TEDGE_SERVICE_NAME "tiny-edge"
+/** c8y_Agent's url and maintainer. */
+#define TEDGE_AGENT_URL "https://github.com/thin-edge/tiny-edge"
+#define TEDGE_AGENT_MAINTAINER "thin-edge.io"
+
+struct tedge_port_platform;
+
+/** What the device runs on (the port's answer), for tedge_Agent. */
+const struct tedge_port_platform *tedge_platform(void);
 
 /** Transport operations, called only from the client thread. */
 struct tedge_transport {
@@ -85,6 +99,10 @@ _Noreturn void tedge_device_reset(void);
 
 /** "<TEDGE_DEVICE_ID_PREFIX>-<MAC>" into @p buf (tedge_device.c). */
 int tedge_default_device_id(char *buf, size_t len);
+
+/** The MAC address as 12 lower-case hex digits: the default serial
+ *  number. 0, or a negative errno. */
+int tedge_default_serial_number(char *buf, size_t len);
 
 /* --- Encodings (tedge_codec.c) ------------------------------------------ */
 

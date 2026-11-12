@@ -1,0 +1,13 @@
+inputs:
+  - payload: '{"model":"esp32c6","revision":"v0.2","serialNumber":"e8f60afb8198"}'
+    payloadFormat: json
+    topic: "te/device/tedge-e8f60afb8198///twin/c8y_Hardware"
+    clientID: "tedge-e8f60afb8198"
+    time: "2026-11-12T03:00:00.000Z"
+expectedOutput:
+  - cumulocityType: managedObject
+    externalSource:
+      - externalId: tedge-e8f60afb8198
+        type: c8y_Serial
+    payload:
+      c8y_Hardware: {model: esp32c6, revision: v0.2, serialNumber: e8f60afb8198}

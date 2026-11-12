@@ -1,8 +1,8 @@
 {
-  "identifier": "zephyr_tedge_remote_access",
+  "identifier": "tiny_edge_remote_access",
   "jsonSchema": {
     "type": "object",
-    "title": "Zephyr thin-edge.io client: remote access",
+    "title": "tiny-edge client: remote access",
     "properties": {
       "remote_access": {
         "title": "remote_access",
@@ -23,6 +23,9 @@
     "thin-edge.io-zephyr-opcua",
     "thin-edge.io-zephyr-snmp",
     "thin-edge.io-zephyr-agent",
-    "tedge-zephyr"
+    "thin-edge.io-zephyr",
+    "thin-edge.io-esp-idf",
+    "thin-edge.io-posix",
+    "tiny-edge"
   ]
 }

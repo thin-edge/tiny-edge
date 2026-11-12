@@ -28,6 +28,20 @@ int tedge_default_device_id(char *buf, size_t len)
 		       : -ENOSPC;
 }
 
+int tedge_default_serial_number(char *buf, size_t len)
+{
+	uint8_t mac[6];
+	int rc = tedge_port_mac_address(mac);
+
+	if (rc != 0) {
+		return rc;
+	}
+	return snprintf(buf, len, "%02x%02x%02x%02x%02x%02x", mac[0], mac[1],
+			mac[2], mac[3], mac[4], mac[5]) < (int)len
+		       ? 0
+		       : -ENOSPC;
+}
+
 _Noreturn void tedge_device_reset(void)
 {
 	const struct tedge_hooks *hooks = tedge_hook_table();

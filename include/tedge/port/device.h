@@ -34,6 +34,26 @@ int tedge_port_mac_address(uint8_t mac[6]);
 const char *tedge_port_firmware_name(void);
 const char *tedge_port_firmware_version(void);
 
+/** What the device runs on, as the cloud shows it. A member the port cannot
+ *  tell is NULL or "". The strings stay valid for the program's life. */
+struct tedge_port_platform {
+	/** The operating system, lower case: "zephyr", "freertos", "linux". */
+	const char *os;
+	/** Its version, as the operating system states it. */
+	const char *os_version;
+	/** The SDK or framework above it, if any, with its version:
+	 *  "esp-idf v6.1". */
+	const char *sdk;
+	/** The board, or the chip when the platform has no boards: c8y_Hardware's
+	 *  model unless the application names it. */
+	const char *model;
+	/** The board's or the chip's revision: c8y_Hardware's revision. */
+	const char *revision;
+};
+
+/** Fill @p out. The core calls it once, from tedge_init(). */
+void tedge_port_platform(struct tedge_port_platform *out);
+
 /**
  * Reset the whole device, now. The core has already given the
  * application's reset hook its chance, and flushed the log.

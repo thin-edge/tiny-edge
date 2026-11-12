@@ -1,0 +1,6 @@
+smartFunctionFile: events.js
+description: "tiny-edge events (zephyr_Identify and any other type) to Cumulocity events"
+tags: [tiny-edge, event]
+input:
+  transport: mqtt
+  topicPattern: "te/device/*///e/*"

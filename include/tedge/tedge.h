@@ -79,6 +79,14 @@ struct tedge_identity {
 	const char *firmware_name;
 	/** Default: the application's version (APP_VERSION_STRING). */
 	const char *firmware_version;
+	/** c8y_Hardware's model. Default: the port's (the board, or the
+	 *  chip). */
+	const char *hardware_model;
+	/** c8y_Hardware's revision. Default: the port's. */
+	const char *hardware_revision;
+	/** c8y_Hardware's serialNumber. Default: the MAC address, 12 hex
+	 *  digits. */
+	const char *serial_number;
 };
 
 /**

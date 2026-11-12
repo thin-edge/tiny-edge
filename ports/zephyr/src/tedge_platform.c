@@ -11,6 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/sys/reboot.h>
+#include <zephyr/version.h>
 
 #include <errno.h>
 #include <string.h>
@@ -53,6 +54,20 @@ const char *tedge_port_firmware_version(void)
 	return APP_VERSION_STRING;
 #else
 	return "0.0.0";
+#endif
+}
+
+/* Zephyr, and the board the image was built for. */
+void tedge_port_platform(struct tedge_port_platform *out)
+{
+	out->os = "zephyr";
+	out->os_version = KERNEL_VERSION_STRING;
+	out->sdk = NULL;
+	out->model = CONFIG_BOARD;
+#if defined(CONFIG_BOARD_REVISION)
+	out->revision = CONFIG_BOARD_REVISION;
+#else
+	out->revision = NULL;
 #endif
 }
 
