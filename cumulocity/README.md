@@ -10,7 +10,7 @@ parameters, shell) need no mapping.
 | Directory | What it is | Needed for |
 |---|---|---|
 | `smart-functions/tiny-edge-measurements/` | `te/device/*///m/*` → measurements | any measurement, including `tedge_health` |
-| `smart-functions/tiny-edge-twin/` | `te/device/*///twin/*` → managed-object fragments | `remoteAccess`, `tedge_Agent`, `c8y_Agent`, `c8y_Hardware`, and the current parameter values the Parameters tab shows |
+| `smart-functions/tiny-edge-twin/` | `te/device/*///twin/*` → managed-object fragments | `remoteAccess`, `c8y_Agent`, `tedge_OS`, `tedge_Agent`, `c8y_Hardware`, and the current parameter values the Parameters tab shows |
 | `smart-functions/tiny-edge-firmware-progress/` | `te/device/*///progress/firmware` → `c8y_FirmwareDownload` events | download progress while a firmware update runs (optional) |
 | `smart-functions/tiny-edge-events/` | `te/device/*///e/*` → events | any event, including `zephyr_Identify` from the sw0 identify pattern |
 | `dtm/*.json` | Digital Twin Manager property definitions for the client's own parameter sets (`tiny_edge`, `tiny_edge_remote_access`); an application registers its own sets the same way | the Parameters tab |

@@ -129,7 +129,8 @@ MQTT the same values go out as direct inventory updates instead.
 
 | Topic | Payload | Meaning |
 |---|---|---|
-| `te/device/<id>///twin/tedge_Agent` | `{"name":"tiny-edge","version":"<client version>","os":"zephyr","osVersion":"4.4.2","transport":"c8y-mqtt-service","firmware":"<name> <version>"}` | which client, operating system, and firmware the device runs. ESP-IDF adds `"platform":"esp-idf v6.1"` |
+| `te/device/<id>///twin/tedge_OS` | `{"name":"zephyr","version":"4.4.2"}` | the operating system. ESP-IDF sends `{"name":"freertos","version":"10.5.1","platform":"esp-idf v6.1"}` |
+| `te/device/<id>///twin/tedge_Agent` | `{"transport":"c8y-mqtt-service"}` | how the client connects. The firmware is in `c8y_Firmware` (SmartREST 115), in every build |
 | `te/device/<id>///twin/c8y_Agent` | `{"name":"tiny-edge","version":"<client version>","url":"https://github.com/thin-edge/tiny-edge","maintainer":"thin-edge.io"}` | Cumulocity's agent fragment |
 | `te/device/<id>///twin/c8y_Hardware` | `{"model":"esp32c6_devkitc","serialNumber":"e8f60afb8198"}` | Cumulocity's hardware fragment: the board (`CONFIG_BOARD`), its revision when it has one, and the MAC address. `struct tedge_identity` names its own |
 | `te/device/<id>///twin/tedge_RemoteAccess` | `{"maxSessions":1,"activeSessions":0,"freeSessions":1,"policy":"lan","sessions":[]}` | remote-access capacity, published on every connect and whenever a session opens or ends |

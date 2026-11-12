@@ -1026,42 +1026,44 @@ static size_t append_str(char *buf, size_t cap, size_t n, const char *key,
 			     (n > 1) ? "," : "", key, esc);
 }
 
-/* The client, as twin data like c8y_Hardware: Cumulocity's c8y_Agent, and
- * tedge_Agent, which adds what the device runs on and the firmware. */
-static void publish_agent(const struct tedge_id *id)
+/* Twin data like c8y_Hardware: Cumulocity's c8y_Agent (the client),
+ * tedge_OS (what the device runs on), and tedge_Agent (the one thing
+ * Cumulocity's fragments have no field for: the transport). The firmware is
+ * c8y_Firmware (SmartREST 115). */
+static void publish_agent(void)
 {
 	const struct tedge_port_platform *p = tedge_platform();
-	char agent[288];
-	char fw[96];
+	char buf[192];
 	size_t n = 1;
 
-	agent[0] = '{';
-	n = append_str(agent, sizeof(agent), n, "name", TEDGE_SERVICE_NAME);
-	n = append_str(agent, sizeof(agent), n, "version", tedge_version());
-	n = append_str(agent, sizeof(agent), n, "url", TEDGE_AGENT_URL);
-	n = append_str(agent, sizeof(agent), n, "maintainer",
+	buf[0] = '{';
+	n = append_str(buf, sizeof(buf), n, "name", TEDGE_SERVICE_NAME);
+	n = append_str(buf, sizeof(buf), n, "version", tedge_version());
+	n = append_str(buf, sizeof(buf), n, "url", TEDGE_AGENT_URL);
+	n = append_str(buf, sizeof(buf), n, "maintainer",
 		       TEDGE_AGENT_MAINTAINER);
-	n = tedge_appendf(agent, sizeof(agent), n, "}");
-	if (n < sizeof(agent)) {
-		(void)publish_twin_impl("c8y_Agent", agent);
+	n = tedge_appendf(buf, sizeof(buf), n, "}");
+	if (n < sizeof(buf)) {
+		(void)publish_twin_impl("c8y_Agent", buf);
 	}
 
 	n = 1;
+	n = append_str(buf, sizeof(buf), n, "name", p->os);
+	n = append_str(buf, sizeof(buf), n, "version", p->os_version);
+	n = append_str(buf, sizeof(buf), n, "platform", p->sdk);
+	if (n > 1) {
+		n = tedge_appendf(buf, sizeof(buf), n, "}");
+		if (n < sizeof(buf)) {
+			(void)publish_twin_impl("tedge_OS", buf);
+		}
+	}
 
-	agent[0] = '{';
-	n = append_str(agent, sizeof(agent), n, "name", TEDGE_SERVICE_NAME);
-	n = append_str(agent, sizeof(agent), n, "version", tedge_version());
-	n = append_str(agent, sizeof(agent), n, "os", p->os);
-	n = append_str(agent, sizeof(agent), n, "osVersion", p->os_version);
-	n = append_str(agent, sizeof(agent), n, "platform", p->sdk);
-	n = append_str(agent, sizeof(agent), n, "transport",
+	n = 1;
+	n = append_str(buf, sizeof(buf), n, "transport",
 		       FREE_FORM_TOPICS ? "c8y-mqtt-service" : "c8y-core-mqtt");
-	snprintf(fw, sizeof(fw), "%s %s", id->firmware_name,
-		 id->firmware_version);
-	n = append_str(agent, sizeof(agent), n, "firmware", fw);
-	n = tedge_appendf(agent, sizeof(agent), n, "}");
-	if (n < sizeof(agent)) {
-		(void)publish_twin_impl("tedge_Agent", agent);
+	n = tedge_appendf(buf, sizeof(buf), n, "}");
+	if (n < sizeof(buf)) {
+		(void)publish_twin_impl("tedge_Agent", buf);
 	}
 }
 
@@ -1137,22 +1139,28 @@ static int session_start(void)
 		(void)publish("s/uat", "", QOS_0);
 	}
 
-#if defined(TEDGE_FIRMWARE_UPDATE)
+	/* c8y_Firmware, in every build: the running image's name and version.
+	 * With firmware update, the version the bootloader reports. */
 	{
 		char ver[TEDGE_FW_VERSION_SIZE] = "";
 		char fw[96];
 
-		if (tedge_fw_running_version(ver, sizeof(ver)) == 0) {
+#if defined(TEDGE_FIRMWARE_UPDATE)
+		if (tedge_fw_running_version(ver, sizeof(ver)) != 0) {
+			TEDGE_LOG_WRN("firmware: cannot read the running version");
+			ver[0] = '\0';
+		}
+#else
+		snprintf(ver, sizeof(ver), "%s", id->firmware_version);
+#endif
+		if (ver[0] != '\0') {
 			TEDGE_LOG_INF("firmware: running %s %s", id->firmware_name, ver);
 			snprintf(fw, sizeof(fw), "115,%s,%s", id->firmware_name,
 				 ver);
 			(void)tedge_c8y_publish_sr(fw);
-		} else {
-			TEDGE_LOG_WRN("firmware: cannot read the running version");
 		}
 	}
-#endif
-	publish_agent(id);
+	publish_agent();
 	publish_hardware(id);
 #if defined(TEDGE_REMOTE_ACCESS)
 	{
