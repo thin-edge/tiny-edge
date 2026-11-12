@@ -42,6 +42,9 @@ struct tedge_id {
 
 /** The client's name in the cloud: its service and its tedge_Agent. */
 #define TEDGE_SERVICE_NAME "tiny-edge"
+/** c8y_Agent's url and maintainer. */
+#define TEDGE_AGENT_URL "https://github.com/thin-edge/tiny-edge"
+#define TEDGE_AGENT_MAINTAINER "thin-edge.io"
 
 struct tedge_port_platform;
 

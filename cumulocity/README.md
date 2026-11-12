@@ -10,7 +10,7 @@ parameters, shell) need no mapping.
 | Directory | What it is | Needed for |
 |---|---|---|
 | `smart-functions/tiny-edge-measurements/` | `te/device/*///m/*` → measurements | any measurement, including `tedge_health` |
-| `smart-functions/tiny-edge-twin/` | `te/device/*///twin/*` → managed-object fragments | `remoteAccess`, `tedge_Agent`, `c8y_Hardware`, and the current parameter values the Parameters tab shows |
+| `smart-functions/tiny-edge-twin/` | `te/device/*///twin/*` → managed-object fragments | `remoteAccess`, `tedge_Agent`, `c8y_Agent`, `c8y_Hardware`, and the current parameter values the Parameters tab shows |
 | `smart-functions/tiny-edge-firmware-progress/` | `te/device/*///progress/firmware` → `c8y_FirmwareDownload` events | download progress while a firmware update runs (optional) |
 | `smart-functions/tiny-edge-events/` | `te/device/*///e/*` → events | any event, including `zephyr_Identify` from the sw0 identify pattern |
 | `dtm/*.json` | Digital Twin Manager property definitions for the client's own parameter sets (`tiny_edge`, `tiny_edge_remote_access`); an application registers its own sets the same way | the Parameters tab |
@@ -68,12 +68,14 @@ Service reaches the tenant. The one the firmware sends itself is
 `zephyr_Identify`: an operator at a board presses `sw0` twice, and the event
 shows which cloud device it is.
 
-**Hardware.** The device sends Cumulocity's `c8y_Hardware` fragment as a
-twin message (`te/device/<id>///twin/c8y_Hardware`), so the twin function
-writes it with no mapping of its own: `model` (the board on Zephyr, the chip
+**Agent and hardware.** The device sends Cumulocity's `c8y_Agent` and
+`c8y_Hardware` fragments as twin messages (`te/device/<id>///twin/c8y_Agent`
+and `.../twin/c8y_Hardware`), so the twin function writes them with no
+mapping of their own. `c8y_Agent` names the client (`tiny-edge`), its
+version, its URL, and its maintainer. `c8y_Hardware` has `model` (the board on Zephyr, the chip
 on ESP-IDF, the machine type on POSIX), `revision`, and `serialNumber` (the
 MAC address), each unless the application names its own. On Core MQTT the
-client writes the fragment itself.
+client writes both fragments itself.
 
 ## Parameters tab (DTM)
 

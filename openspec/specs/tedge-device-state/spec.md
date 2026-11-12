@@ -49,9 +49,11 @@ clear the marker.
 The client SHALL publish its own twin fragment (`tedge_Agent`: the client's
 name `tiny-edge`, its version, the operating system and its version, the SDK
 when there is one, the transport, and the firmware), Cumulocity's
+`c8y_Agent` fragment (name, version, URL, and maintainer), Cumulocity's
 `c8y_Hardware` fragment (model, revision, and serial number, each when known),
 and its health (`up`) on every connect, on
-`te/device/<id>///twin/tedge_Agent`, `te/device/<id>///twin/c8y_Hardware`, and
+`te/device/<id>///twin/tedge_Agent`, `te/device/<id>///twin/c8y_Agent`,
+`te/device/<id>///twin/c8y_Hardware`, and
 `te/device/<id>/service/tiny-edge/status/health` when connected to the MQTT
 Service. On Core MQTT it SHALL send the twin fragments as direct inventory
 updates. No name the client publishes SHALL depend on the port: the port

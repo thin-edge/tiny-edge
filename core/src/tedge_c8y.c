@@ -1026,13 +1026,27 @@ static size_t append_str(char *buf, size_t cap, size_t n, const char *key,
 			     (n > 1) ? "," : "", key, esc);
 }
 
-/* The client, what it runs on, and the firmware: tedge_Agent. */
+/* The client, as twin data like c8y_Hardware: Cumulocity's c8y_Agent, and
+ * tedge_Agent, which adds what the device runs on and the firmware. */
 static void publish_agent(const struct tedge_id *id)
 {
 	const struct tedge_port_platform *p = tedge_platform();
 	char agent[288];
 	char fw[96];
 	size_t n = 1;
+
+	agent[0] = '{';
+	n = append_str(agent, sizeof(agent), n, "name", TEDGE_SERVICE_NAME);
+	n = append_str(agent, sizeof(agent), n, "version", tedge_version());
+	n = append_str(agent, sizeof(agent), n, "url", TEDGE_AGENT_URL);
+	n = append_str(agent, sizeof(agent), n, "maintainer",
+		       TEDGE_AGENT_MAINTAINER);
+	n = tedge_appendf(agent, sizeof(agent), n, "}");
+	if (n < sizeof(agent)) {
+		(void)publish_twin_impl("c8y_Agent", agent);
+	}
+
+	n = 1;
 
 	agent[0] = '{';
 	n = append_str(agent, sizeof(agent), n, "name", TEDGE_SERVICE_NAME);
