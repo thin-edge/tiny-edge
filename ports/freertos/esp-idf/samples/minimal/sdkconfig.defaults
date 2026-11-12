@@ -12,3 +12,6 @@ CONFIG_LOG_COLORS=n
 
 # The cloud may run the sample's own commands (main.c), and nothing else.
 CONFIG_TEDGE_SHELL_COMMAND_ALLOW_LIST="free,version,uptime"
+
+# Set up over USB with tedge-onboard: Wi-Fi, tenant, and registration.
+CONFIG_TEDGE_PROVISIONING=y
