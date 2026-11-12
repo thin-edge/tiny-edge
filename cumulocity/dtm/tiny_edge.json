@@ -1,8 +1,8 @@
 {
-  "identifier": "zephyr_tedge",
+  "identifier": "tiny_edge",
   "jsonSchema": {
     "type": "object",
-    "title": "Zephyr thin-edge.io client",
+    "title": "tiny-edge client",
     "properties": {
       "log_level": {
         "title": "log_level",
@@ -48,6 +48,9 @@
     "thin-edge.io-zephyr-opcua",
     "thin-edge.io-zephyr-snmp",
     "thin-edge.io-zephyr-agent",
-    "tedge-zephyr"
+    "thin-edge.io-zephyr",
+    "thin-edge.io-esp-idf",
+    "thin-edge.io-posix",
+    "tiny-edge"
   ]
 }

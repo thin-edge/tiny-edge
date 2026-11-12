@@ -1,0 +1,6 @@
+smartFunctionFile: firmware-progress.js
+description: "tiny-edge firmware download progress to c8y_FirmwareDownload events"
+tags: [tiny-edge, firmware]
+input:
+  transport: mqtt
+  topicPattern: "te/device/*///progress/firmware"

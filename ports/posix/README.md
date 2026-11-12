@@ -140,7 +140,7 @@ int main(int argc, char **argv)
 | `net.h` | Non-blocking BSD sockets, mbedTLS for TLS 1.2, `getaddrinfo()`, and `getifaddrs()`. The network state is polled every 2 seconds |
 | `crypto.h` | The device key as `<state_dir>/device-key.pem` (P-256, mode 0600), as thin-edge.io keeps its keys on Linux. Random numbers from `getentropy()` |
 | `time.h` | The system clock. Setting it is the system's job (NTP), so the port never does |
-| `device.h` | The MAC address of the client's interface. A restart is `execv()` of the same command line. There is no reset cause |
+| `device.h` | The MAC address of the client's interface. A restart is `execv()` of the same command line. There is no reset cause. What it runs on comes from `uname()`: the kernel's name in lower case (`linux`, `darwin`) and release, and the machine type (`x86_64`, `arm64`) as the hardware model |
 
 The DNS timeout is the system resolver's own (`resolv.conf`), because
 `getaddrinfo()` cannot be cancelled.

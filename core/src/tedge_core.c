@@ -39,6 +39,7 @@ TEDGE_LOG_REGISTER();
 #define TWIN_SLOTS    (TEDGE_PARAM_MAX_SETS + 2 + 2)
 
 static struct tedge_id identity;
+static struct tedge_port_platform platform;
 static const struct tedge_hooks *hooks;
 static tedge_port_atomic_t state = TEDGE_PORT_ATOMIC_INIT(TEDGE_STATE_STOPPED);
 static bool initialised;
@@ -139,6 +140,11 @@ enum tedge_state tedge_get_state(void)
 const struct tedge_id *tedge_identity(void)
 {
 	return &identity;
+}
+
+const struct tedge_port_platform *tedge_platform(void)
+{
+	return &platform;
 }
 
 const struct tedge_hooks *tedge_hook_table(void)
@@ -437,12 +443,16 @@ static bool started_once;
 static void copy_or_default(char *dst, size_t len, const char *value,
 			    const char *fallback)
 {
-	snprintf(dst, len, "%s", (value != NULL && value[0]) ? value : fallback);
+	snprintf(dst, len, "%s",
+		 (value != NULL && value[0]) ? value
+		 : (fallback != NULL)        ? fallback
+					     : "");
 }
 
 int tedge_init(const struct tedge_identity *id, const struct tedge_hooks *h)
 {
 	char mac_id[64] = "";
+	char serial[16];
 
 	if (initialised) {
 		return -EALREADY;
@@ -469,6 +479,17 @@ int tedge_init(const struct tedge_identity *id, const struct tedge_hooks *h)
 			sizeof(identity.firmware_version),
 			id ? id->firmware_version : NULL,
 			tedge_port_firmware_version());
+	tedge_port_platform(&platform);
+	copy_or_default(identity.hardware_model, sizeof(identity.hardware_model),
+			id ? id->hardware_model : NULL, platform.model);
+	copy_or_default(identity.hardware_revision,
+			sizeof(identity.hardware_revision),
+			id ? id->hardware_revision : NULL, platform.revision);
+	if (tedge_default_serial_number(serial, sizeof(serial)) != 0) {
+		serial[0] = '\0';
+	}
+	copy_or_default(identity.serial_number, sizeof(identity.serial_number),
+			id ? id->serial_number : NULL, serial);
 
 	tedge_port_net_watch(on_network);
 

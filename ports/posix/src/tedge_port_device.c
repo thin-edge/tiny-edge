@@ -12,12 +12,14 @@
 
 #include "tedge_posix_internal.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <ifaddrs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 #if defined(__linux__)
@@ -164,4 +166,23 @@ int tedge_port_time_now(time_t *secs)
 	}
 	*secs = now;
 	return 0;
+}
+
+/* The host's kernel and machine, from uname(): "linux" or "darwin", its
+ * release, and the machine type ("x86_64", "arm64"). */
+void tedge_port_platform(struct tedge_port_platform *out)
+{
+	static struct utsname host;
+	static char os[sizeof(host.sysname)];
+
+	memset(out, 0, sizeof(*out));
+	if (uname(&host) != 0) {
+		return;
+	}
+	for (size_t i = 0; i < sizeof(os) - 1 && host.sysname[i] != '\0'; i++) {
+		os[i] = (char)tolower((unsigned char)host.sysname[i]);
+	}
+	out->os = os;
+	out->os_version = host.release;
+	out->model = host.machine;
 }

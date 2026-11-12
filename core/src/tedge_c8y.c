@@ -13,6 +13,7 @@
 #include "tedge_mqtt.h"
 #include "tedge_util.h"
 
+#include <tedge/port/device.h>
 #include <tedge/port/kv.h>
 #include <tedge/port/log.h>
 #include <tedge/port/net.h>
@@ -1002,11 +1003,72 @@ static void publish_health(void)
 		return;
 	}
 	(void)tedge_port_time_now(&now);
-	snprintf(topic, sizeof(topic), "te/device/%s/service/tedge-zephyr/status/health",
+	snprintf(topic, sizeof(topic),
+		 "te/device/%s/service/" TEDGE_SERVICE_NAME "/status/health",
 		 device_id);
 	snprintf(body, sizeof(body), "{\"status\":\"up\",\"time\":%lld}",
 		 (long long)now);
 	(void)publish(topic, body, QOS_1);
+}
+
+/* Appends "<key>":"<value>" to a JSON object being built (n > 1 once it has
+ * a member), unless the value is empty. */
+static size_t append_str(char *buf, size_t cap, size_t n, const char *key,
+			 const char *value)
+{
+	char esc[96];
+
+	if (value == NULL || value[0] == '\0') {
+		return n;
+	}
+	tedge_json_escape(value, esc, sizeof(esc));
+	return tedge_appendf(buf, cap, n, "%s\"%s\":\"%s\"",
+			     (n > 1) ? "," : "", key, esc);
+}
+
+/* The client, what it runs on, and the firmware: tedge_Agent. */
+static void publish_agent(const struct tedge_id *id)
+{
+	const struct tedge_port_platform *p = tedge_platform();
+	char agent[288];
+	char fw[96];
+	size_t n = 1;
+
+	agent[0] = '{';
+	n = append_str(agent, sizeof(agent), n, "name", TEDGE_SERVICE_NAME);
+	n = append_str(agent, sizeof(agent), n, "version", tedge_version());
+	n = append_str(agent, sizeof(agent), n, "os", p->os);
+	n = append_str(agent, sizeof(agent), n, "osVersion", p->os_version);
+	n = append_str(agent, sizeof(agent), n, "platform", p->sdk);
+	n = append_str(agent, sizeof(agent), n, "transport",
+		       FREE_FORM_TOPICS ? "c8y-mqtt-service" : "c8y-core-mqtt");
+	snprintf(fw, sizeof(fw), "%s %s", id->firmware_name,
+		 id->firmware_version);
+	n = append_str(agent, sizeof(agent), n, "firmware", fw);
+	n = tedge_appendf(agent, sizeof(agent), n, "}");
+	if (n < sizeof(agent)) {
+		(void)publish_twin_impl("tedge_Agent", agent);
+	}
+}
+
+/* Cumulocity's hardware fragment: model, revision, and serial number. On
+ * the MQTT service the twin smart function writes it under the same name;
+ * on Core MQTT it is an inventory update. Nothing when nothing is known. */
+static void publish_hardware(const struct tedge_id *id)
+{
+	char hw[160];
+	size_t n = 1;
+
+	hw[0] = '{';
+	n = append_str(hw, sizeof(hw), n, "model", id->hardware_model);
+	n = append_str(hw, sizeof(hw), n, "revision", id->hardware_revision);
+	n = append_str(hw, sizeof(hw), n, "serialNumber", id->serial_number);
+	if (n > 1) {
+		n = tedge_appendf(hw, sizeof(hw), n, "}");
+		if (n < sizeof(hw)) {
+			(void)publish_twin_impl("c8y_Hardware", hw);
+		}
+	}
 }
 
 /* 100, subscriptions, 114, 117, s/uat, then state (design D6). */
@@ -1019,7 +1081,6 @@ static int session_start(void)
 
 	const struct tedge_id *id = tedge_identity();
 	char line[160];
-	char agent[192];
 
 	snprintf(line, sizeof(line), "100,%s,%s", id->name, id->type);
 	(void)tedge_c8y_publish_sr(line);
@@ -1077,12 +1138,8 @@ static int session_start(void)
 		}
 	}
 #endif
-	snprintf(agent, sizeof(agent),
-		 "{\"name\":\"tedge-zephyr\",\"version\":\"%s\","
-		 "\"transport\":\"%s\",\"firmware\":\"%s %s\"}",
-		 tedge_version(), FREE_FORM_TOPICS ? "c8y-mqtt-service" : "c8y-core-mqtt",
-		 id->firmware_name, id->firmware_version);
-	(void)publish_twin_impl("tedge_Agent", agent);
+	publish_agent(id);
+	publish_hardware(id);
 #if defined(TEDGE_REMOTE_ACCESS)
 	{
 		char ra[224];

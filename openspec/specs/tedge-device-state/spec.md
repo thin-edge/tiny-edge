@@ -46,13 +46,33 @@ clear the marker.
 
 ### Requirement: State is published as twin data and health on thin-edge.io topics
 
-The client SHALL publish its own twin fragment (`tedge_Agent`: module name,
-version and transport) and its health (`up`) on every connect, on
-`te/device/<id>///twin/tedge_Agent` and
-`te/device/<id>/service/tedge-zephyr/status/health` when connected to the MQTT
-Service. On Core MQTT it SHALL send the twin fragment as a direct inventory
-update. The application SHALL be able to publish its own twin fragments through
+The client SHALL publish its own twin fragment (`tedge_Agent`: the client's
+name `tiny-edge`, its version, the operating system and its version, the SDK
+when there is one, the transport, and the firmware), Cumulocity's
+`c8y_Hardware` fragment (model, revision, and serial number, each when known),
+and its health (`up`) on every connect, on
+`te/device/<id>///twin/tedge_Agent`, `te/device/<id>///twin/c8y_Hardware`, and
+`te/device/<id>/service/tiny-edge/status/health` when connected to the MQTT
+Service. On Core MQTT it SHALL send the twin fragments as direct inventory
+updates. No name the client publishes SHALL depend on the port: the port
+states what it runs on, inside `tedge_Agent`. The application SHALL be able to publish its own twin fragments through
 the API, which the client republishes after every reconnect.
+
+#### Scenario: The same names on every port
+
+- **WHEN** a device on Zephyr and a device on ESP-IDF connect
+- **THEN** both publish `tedge_Agent` with the name `tiny-edge`, health under
+  the `tiny-edge` service, and the parameter sets `tiny_edge` and
+  `tiny_edge_remote_access`, and only `tedge_Agent`'s `os`, `osVersion`, and
+  `platform` tell them apart
+
+#### Scenario: Hardware information
+
+- **WHEN** an ESP32-C6 running the ESP-IDF sample connects
+- **THEN** its managed object carries
+  `c8y_Hardware` `{"model":"esp32c6","revision":"v0.2","serialNumber":"<MAC>"}`,
+  unless the application named the model, revision, or serial number in
+  `struct tedge_identity`
 
 #### Scenario: Application twin fragment survives a reconnect
 
