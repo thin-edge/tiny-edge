@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0](https://github.com/thin-edge/tiny-edge/compare/v0.4.0...v0.5.0) (2026-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* the health service, the tedge_Agent name, the parameter sets, and the Smart Function rules are renamed. cumulocity/README.md, "Moving a tenant from tedge-zephyr names", lists what a tenant needs: the new rules (with the old ones deleted), the new DTM definitions, and the removal of the old fragments and service.
+
+### Features
+
+* **esp-idf:** set devices up over USB with tedge-onboard ([5ff2c4f](https://github.com/thin-edge/tiny-edge/commit/5ff2c4f0987ac187a32c63edb578386d5acf717a))
+* **esp-idf:** set devices up over USB with tedge-onboard ([41d8bfc](https://github.com/thin-edge/tiny-edge/commit/41d8bfcc3ce8bfa0bc168e37ce4c225f3fd2f94a))
+* move the OS to tedge_OS and drop duplicates from tedge_Agent ([12b24f2](https://github.com/thin-edge/tiny-edge/commit/12b24f2929d084d5f29b16bf5a16cb2c14c79263))
+* report Cumulocity's c8y_Agent fragment ([b156c4a](https://github.com/thin-edge/tiny-edge/commit/b156c4a01910560816c238d86adb6f05d359df54))
+* report tiny-edge names, the OS, and c8y_Hardware on every port ([bec9a28](https://github.com/thin-edge/tiny-edge/commit/bec9a284cbd8a3b8d827fb293f578c0bcca4d8ed))
+
+
+### Bug Fixes
+
+* report firmware versions up to 31 characters ([0a3f74f](https://github.com/thin-edge/tiny-edge/commit/0a3f74fee897ae8b465ae62b5ecf928da84d9b13))
+
 ## [0.4.0](https://github.com/thin-edge/tiny-edge/compare/v0.3.0...v0.4.0) (2026-11-11)
 
 
