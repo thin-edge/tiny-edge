@@ -197,6 +197,26 @@ int tedge_get_c8y_url(char *buf, size_t len)
 	return (int)n;
 }
 
+static int copy_out(const char *value, char *buf, size_t len)
+{
+	size_t n;
+
+	if (!initialised) {
+		return -EPERM;
+	}
+	n = strlen(value);
+	if (n >= len) {
+		return -ENOSPC;
+	}
+	memcpy(buf, value, n + 1);
+	return (int)n;
+}
+
+int tedge_get_device_type(char *buf, size_t len)
+{
+	return copy_out(identity.type, buf, len);
+}
+
 int tedge_get_device_id(char *buf, size_t len)
 {
 	size_t n;

@@ -474,7 +474,7 @@ func (f *flow) register(b *device.Board, s cumulocity.Session, name string, agai
 		return result{}, err
 	}
 	if err := f.u.Step("Registering the device in Cumulocity", func(context.Context) (string, error) {
-		return "Registered in Cumulocity", f.c8y.Register(b.Info.DeviceID, name, otp)
+		return "Registered in Cumulocity", f.c8y.Register(b.Info.DeviceID, name, otp, b.Info.DeviceType)
 	}); err != nil {
 		f.u.Problem("Cumulocity did not accept the registration.",
 			"Cumulocity said: "+err.Error()+"\nYour Cumulocity user needs permission to register devices.")

@@ -25,6 +25,7 @@
     "thin-edge.io-zephyr-agent",
     "thin-edge.io-zephyr",
     "thin-edge.io-esp-idf",
+    "thin-edge.io-esp-idf-agent",
     "thin-edge.io-posix",
     "tiny-edge"
   ]

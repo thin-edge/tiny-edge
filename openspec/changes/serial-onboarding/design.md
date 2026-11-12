@@ -59,7 +59,7 @@ The library answers:
 | 0x02 | Request current state | serial | Improv standard (0x02 is "identify" on BLE) |
 | 0x02 | Identify | BLE | Improv standard; the application's hook, if any |
 | 0x03 | Request device info | serial | Improv standard: firmware name and version, chip, device name |
-| 0xE0 | tiny-edge info | both | External ID, auth mode, tenant if set, client state |
+| 0xE0 | tiny-edge info | both | External ID, auth mode, tenant if set, client state, device type |
 | 0xE1 | tiny-edge onboard | both | Tenant host and one-time password |
 | 0xE2 | tiny-edge identify | serial | Blink or log, to tell boards apart (BLE uses 0x02) |
 

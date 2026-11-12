@@ -168,6 +168,7 @@ type TedgeInfo struct {
 	Auth            string // "c8y-ca" or "bootstrap"
 	Tenant          string // empty when none is set
 	State           string // "awaiting-registration", "connected", ...
+	DeviceType      string // empty from devices older than the field
 }
 
 // Info asks for the tiny-edge info.
@@ -180,7 +181,11 @@ func (c *Client) Info(ctx context.Context, timeout time.Duration) (TedgeInfo, er
 		return TedgeInfo{}, fmt.Errorf("the device's answer was incomplete")
 	}
 	v, _ := strconv.Atoi(s[0])
-	return TedgeInfo{ProtocolVersion: v, DeviceID: s[1], Auth: s[2], Tenant: s[3], State: s[4]}, nil
+	info := TedgeInfo{ProtocolVersion: v, DeviceID: s[1], Auth: s[2], Tenant: s[3], State: s[4]}
+	if len(s) > 5 {
+		info.DeviceType = s[5]
+	}
+	return info, nil
 }
 
 // DeviceInfo is what Improv's device info command reports.

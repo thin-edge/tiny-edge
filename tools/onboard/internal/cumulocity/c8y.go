@@ -248,11 +248,15 @@ func (c *Client) Device(id string) (Device, error) {
 }
 
 // Register registers the board's ID with a one-time password, so the board
-// can enroll for a certificate.
-func (c *Client) Register(externalID, name, otp string) error {
-	_, err := c.Run.Run(c.env, "deviceregistration", "register-ca",
-		"--id", externalID, "--name", name, "--one-time-password", otp,
-		"--force", "-o", "json")
+// can enroll for a certificate. The device is created with deviceType, the
+// type the board reports; empty leaves go-c8y-cli's default ("thin-edge.io").
+func (c *Client) Register(externalID, name, otp, deviceType string) error {
+	args := []string{"deviceregistration", "register-ca",
+		"--id", externalID, "--name", name, "--one-time-password", otp}
+	if deviceType != "" {
+		args = append(args, "--type", deviceType)
+	}
+	_, err := c.Run.Run(c.env, append(args, "--force", "-o", "json")...)
 	return err
 }
 
