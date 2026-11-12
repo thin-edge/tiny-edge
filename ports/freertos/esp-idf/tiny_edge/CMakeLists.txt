@@ -23,9 +23,12 @@ set(TEDGE_COMMON_DIR ${TEDGE_ROOT}/ports/common)
 
 include(${TEDGE_ROOT}/core/sources.cmake)
 tedge_core_sources(_core_sources CONFIG_)
+include(${TEDGE_ROOT}/provisioning/sources.cmake)
+tedge_provisioning_sources(_provisioning_sources CONFIG_)
 
 set(_srcs
   ${_core_sources}
+  ${_provisioning_sources}
   ${TEDGE_FREERTOS_DIR}/src/tedge_port_os.c
   ${TEDGE_COMMON_DIR}/src/tedge_sockets.c
   src/tedge_port_device.c
@@ -43,6 +46,9 @@ endif()
 if(CONFIG_TEDGE_FIRMWARE_UPDATE)
   list(APPEND _srcs src/tedge_port_fw.c)
 endif()
+if(CONFIG_TEDGE_PROVISIONING)
+  list(APPEND _srcs src/tedge_provisioning_esp_idf.c)
+endif()
 if(CONFIG_TEDGE_SHELL_COMMAND)
   list(APPEND _srcs src/tedge_shell_cmd.c)
 endif()
@@ -56,6 +62,7 @@ idf_component_register(
   REQUIRES freertos log mbedtls
   PRIV_REQUIRES esp_netif esp_event esp_wifi esp_app_format app_update
     esp_hw_support esp_system nvs_flash lwip console
+    esp_driver_uart esp_driver_usb_serial_jtag
   # The log capture registers itself in a constructor, which nothing
   # references by name.
   WHOLE_ARCHIVE

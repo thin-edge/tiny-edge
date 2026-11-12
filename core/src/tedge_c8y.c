@@ -1019,7 +1019,7 @@ static int session_start(void)
 
 	const struct tedge_id *id = tedge_identity();
 	char line[160];
-	char agent[160];
+	char agent[192];
 
 	snprintf(line, sizeof(line), "100,%s,%s", id->name, id->type);
 	(void)tedge_c8y_publish_sr(line);
@@ -1064,7 +1064,7 @@ static int session_start(void)
 
 #if defined(TEDGE_FIRMWARE_UPDATE)
 	{
-		char ver[24] = "";
+		char ver[TEDGE_FW_VERSION_SIZE] = "";
 		char fw[96];
 
 		if (tedge_fw_running_version(ver, sizeof(ver)) == 0) {

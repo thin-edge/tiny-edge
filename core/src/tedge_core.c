@@ -478,7 +478,7 @@ int tedge_init(const struct tedge_identity *id, const struct tedge_hooks *h)
 	tedge_fw_arm_confirm_deadline();
 #endif
 	initialised = true;
-	TEDGE_LOG_INF("tedge-zephyr %s: device \"%s\" (%s)", tedge_version(),
+	TEDGE_LOG_INF("tiny-edge %s: device \"%s\" (%s)", tedge_version(),
 		identity.external_id, identity.type);
 	return 0;
 }

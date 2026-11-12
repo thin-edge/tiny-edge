@@ -7,9 +7,16 @@
  * With certificate enrollment (the default), the first boot logs a URL:
  * open it to register the device in Cumulocity. The key and certificate
  * are kept in NVS, so later boots connect at once.
+ *
+ * With the provisioning library (CONFIG_TEDGE_PROVISIONING), tedge-onboard
+ * sets the device up over USB instead: the Wi-Fi network, the tenant, and
+ * the registration, with nothing built into the image.
  */
 
 #include <tedge/tedge.h>
+#if CONFIG_TEDGE_PROVISIONING
+#include <tedge/provisioning_esp_idf.h>
+#endif
 
 #include <esp_event.h>
 #include <esp_log.h>
@@ -24,6 +31,7 @@
 #include <esp_app_desc.h>
 #endif
 
+#include <stdbool.h>
 #include <string.h>
 
 static const char *TAG = "sample";
@@ -47,14 +55,30 @@ static const struct tedge_hooks hooks = {
 };
 
 /* Keeps the station connected: the client only watches the network. */
+/* Whether the station has a network to join. */
+static bool have_network(void)
+{
+	wifi_config_t cfg;
+
+	return esp_wifi_get_config(WIFI_IF_STA, &cfg) == ESP_OK &&
+	       cfg.sta.ssid[0] != '\0';
+}
+
 static void on_wifi(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
 	(void)arg;
 	if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-		(void)esp_wifi_connect();
+		if (have_network()) {
+			(void)esp_wifi_connect();
+		}
 	} else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
 		const wifi_event_sta_disconnected_t *ev = data;
 
+		/* Leaving on purpose (tedge-onboard switching networks, or
+		 * scanning) is not a reason to join again. */
+		if (ev->reason == WIFI_REASON_ASSOC_LEAVE || !have_network()) {
+			return;
+		}
 		ESP_LOGW(TAG, "Wi-Fi: not connected (reason %d), trying again",
 			 ev->reason);
 		vTaskDelay(pdMS_TO_TICKS(1000));
@@ -87,8 +111,13 @@ static void wifi_start(void)
 		ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &cfg));
 	} else if (esp_wifi_get_config(WIFI_IF_STA, &cfg) != ESP_OK ||
 		   cfg.sta.ssid[0] == '\0') {
+#if CONFIG_TEDGE_PROVISIONING
+		ESP_LOGW(TAG, "no Wi-Fi network yet: set the device up with "
+			 "tedge-onboard");
+#else
 		ESP_LOGE(TAG, "no Wi-Fi network: set one in menuconfig "
 			 "(\"tiny-edge sample\")");
+#endif
 	} else {
 		ESP_LOGI(TAG, "Wi-Fi: using the network stored on the device");
 	}
@@ -167,7 +196,16 @@ void app_main(void)
 	commands_register();
 #endif
 	ESP_LOGI(TAG, "tiny-edge %s", tedge_version());
-	if (tedge_init(NULL, &hooks) != 0 || tedge_start() != 0) {
+	if (tedge_init(NULL, &hooks) != 0) {
+		ESP_LOGE(TAG, "the client did not start");
+		return;
+	}
+#if CONFIG_TEDGE_PROVISIONING
+	if (tedge_provisioning_esp_idf_init(NULL) != 0) {
+		ESP_LOGE(TAG, "tedge-onboard support did not start");
+	}
+#endif
+	if (tedge_start() != 0) {
 		ESP_LOGE(TAG, "the client did not start");
 		return;
 	}

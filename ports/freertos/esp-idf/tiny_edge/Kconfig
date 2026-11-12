@@ -242,6 +242,36 @@ config TEDGE_SHELL_COMMAND_STACK_SIZE
 
 endif # TEDGE_SHELL_COMMAND
 
+menuconfig TEDGE_PROVISIONING
+	bool "Provisioning library: set the device up over Improv Wi-Fi"
+	help
+	  An optional library beside the client (include/tedge/provisioning.h)
+	  that answers the Improv Wi-Fi protocol, as tedge-onboard, ESP Web
+	  Tools and Improv phone apps speak it. It hands a Wi-Fi network to
+	  esp_wifi, and the Cumulocity tenant and one-time password to the
+	  client. The application calls tedge_provisioning_esp_idf_init()
+	  after tedge_init() (include/tedge/provisioning_esp_idf.h).
+
+if TEDGE_PROVISIONING
+
+config TEDGE_PROVISIONING_SERIAL
+	bool "Improv Serial on the console"
+	default y
+	help
+	  The console speaks Improv from boot, beside the log output: the UART
+	  console and the USB Serial/JTAG console, whichever the image uses.
+	  Not for an application that reads the console itself (an
+	  esp_console REPL, say).
+
+config TEDGE_PROVISIONING_STACK_SIZE
+	int "Stack of the provisioning worker thread (bytes)"
+	default 4096
+	help
+	  The worker answers each request; it joins and scans Wi-Fi, and
+	  stops and starts the client.
+
+endif # TEDGE_PROVISIONING
+
 config TEDGE_LOG_UPLOAD
 	bool "Log upload"
 	default y

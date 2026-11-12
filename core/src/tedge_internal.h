@@ -25,12 +25,16 @@
 #include <time.h>
 
 /** Resolved identity: the application's values with the defaults applied. */
+/** Room for a firmware version and its NUL: ESP-IDF allows 31 characters, and
+ * a `git describe` version is often longer than 23. */
+#define TEDGE_FW_VERSION_SIZE 32
+
 struct tedge_id {
 	char external_id[64];
 	char name[64];
 	char type[48];
 	char firmware_name[48];
-	char firmware_version[24];
+	char firmware_version[TEDGE_FW_VERSION_SIZE];
 };
 
 /** Transport operations, called only from the client thread. */
