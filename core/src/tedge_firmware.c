@@ -36,7 +36,7 @@ TEDGE_LOG_DECLARE();
 
 struct pending {
 	char name[48];
-	char version[24];
+	char version[TEDGE_FW_VERSION_SIZE];
 	char url[600];
 };
 
@@ -353,8 +353,8 @@ void tedge_fw_arm_confirm_deadline(void)
 
 int tedge_fw_request(const char *line, char *reason, size_t rlen)
 {
-	char running[24] = "";
-	char name[48], version[24], url[600];
+	char running[TEDGE_FW_VERSION_SIZE] = "";
+	char name[48], version[TEDGE_FW_VERSION_SIZE], url[600];
 
 	/* 515,<device>,<name>,<version>,<url> */
 	if (tedge_sr_field(line, 2, name, sizeof(name)) <= 0 ||
@@ -408,7 +408,7 @@ const char *tedge_fw_downtime_hint(void)
 void tedge_fw_on_connected(void)
 {
 	const struct tedge_hooks *hooks = tedge_hook_table();
-	char version[24] = "";
+	char version[TEDGE_FW_VERSION_SIZE] = "";
 	bool confirmed = tedge_port_fw_is_confirmed();
 	char *sep;
 
