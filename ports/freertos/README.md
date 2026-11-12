@@ -45,7 +45,16 @@ dependencies:
   tiny_edge:
     git: https://github.com/thin-edge/tiny-edge.git
     path: ports/freertos/esp-idf/tiny_edge
+    version: v0.6.0   # a release tag, or a commit
 ```
+
+The component manager fetches only the component's own directory. The
+component builds the core, the provisioning library, and the shared port
+code from beside it, so at configure time it fetches the rest of tiny-edge
+into the build directory: the same commit the component manager resolved,
+from the URL in the project's `dependencies.lock`. That needs `git` and
+network access on the first build. To build from a checkout instead, set
+`TINY_EDGE_DIR` (`idf.py -D TINY_EDGE_DIR=/path/to/tiny-edge build`).
 
 Then add `REQUIRES tiny_edge` (or `PRIV_REQUIRES`) to your component, and
 start the client once the network is set up:

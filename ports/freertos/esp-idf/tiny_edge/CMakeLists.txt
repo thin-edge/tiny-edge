@@ -8,6 +8,7 @@
 #     tiny_edge:
 #       git: https://github.com/thin-edge/tiny-edge.git
 #       path: ports/freertos/esp-idf/tiny_edge
+#       version: v0.6.0
 #
 # and REQUIRES tiny_edge in the application's component. The options are in
 # Kconfig (idf.py menuconfig, "tiny-edge (thin-edge.io client)").
@@ -17,7 +18,32 @@
 # the BSD-sockets and mbedTLS code shared with the POSIX port
 # (ports/common/), and ESP-IDF's own (src/ here).
 
+set(_requires freertos log mbedtls)
+set(_priv_requires esp_netif esp_event esp_wifi esp_app_format app_update
+  esp_hw_support esp_system nvs_flash lwip console
+  esp_driver_uart esp_driver_usb_serial_jtag)
+
+# ESP-IDF's first pass only collects each component's requirements.
+if(CMAKE_BUILD_EARLY_EXPANSION)
+  idf_component_register(REQUIRES ${_requires} PRIV_REQUIRES ${_priv_requires})
+  return()
+endif()
+
+# Inside a tiny-edge checkout, the repository is four directories up. The
+# component manager fetches only this directory, so the rest of tiny-edge is
+# then fetched into the build, at the commit the component manager resolved
+# (the component's version) and from the URL in the project's
+# dependencies.lock. TINY_EDGE_DIR names a checkout to use instead.
 get_filename_component(TEDGE_ROOT ${CMAKE_CURRENT_LIST_DIR}/../../../.. ABSOLUTE)
+if(TINY_EDGE_DIR)
+  set(TEDGE_ROOT ${TINY_EDGE_DIR})
+elseif(NOT EXISTS ${TEDGE_ROOT}/core/sources.cmake)
+  include(${CMAKE_CURRENT_LIST_DIR}/cmake/tedge_fetch.cmake)
+  tedge_fetch(TEDGE_ROOT)
+endif()
+if(NOT EXISTS ${TEDGE_ROOT}/core/sources.cmake)
+  message(FATAL_ERROR "tiny_edge: no tiny-edge sources at ${TEDGE_ROOT}")
+endif()
 set(TEDGE_FREERTOS_DIR ${TEDGE_ROOT}/ports/freertos)
 set(TEDGE_COMMON_DIR ${TEDGE_ROOT}/ports/common)
 
@@ -59,10 +85,8 @@ idf_component_register(
   # (<tedge_port/os.h>, <tedge_port/log.h>).
   INCLUDE_DIRS ${TEDGE_ROOT}/include ${TEDGE_FREERTOS_DIR}/include include
   PRIV_INCLUDE_DIRS ${TEDGE_ROOT}/core/src ${TEDGE_COMMON_DIR}/include
-  REQUIRES freertos log mbedtls
-  PRIV_REQUIRES esp_netif esp_event esp_wifi esp_app_format app_update
-    esp_hw_support esp_system nvs_flash lwip console
-    esp_driver_uart esp_driver_usb_serial_jtag
+  REQUIRES ${_requires}
+  PRIV_REQUIRES ${_priv_requires}
   # The log capture registers itself in a constructor, which nothing
   # references by name.
   WHOLE_ARCHIVE
