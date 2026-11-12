@@ -108,15 +108,25 @@ stored network when the new one cannot be joined.
 
 The library SHALL answer a tiny-edge info command (0xE0) with the
 provisioning protocol version, the external ID, the authentication mode
-(`c8y-ca` or `bootstrap`), the tenant host if one is set, and the client's
-state. It SHALL NOT include any password or credential in the reply.
+(`c8y-ca` or `bootstrap`), the tenant host if one is set, the client's
+state, and the device type. The device type is the last field, so a tool
+that reads only the first five still understands the reply; a tool SHALL
+register the device in Cumulocity with that type when the reply has one. It
+SHALL NOT include any password or credential in the reply.
 
 #### Scenario: Unregistered device
 
 - **WHEN** a tool sends the info command to a device waiting for
   registration
 - **THEN** the reply carries the external ID, `c8y-ca`, the tenant if set,
-  and the state "awaiting-registration"
+  the state "awaiting-registration", and the device type
+
+#### Scenario: The device is registered with its own type
+
+- **WHEN** tedge-onboard registers a device whose info reply names the type
+  `thin-edge.io-esp-idf-agent`
+- **THEN** the device is created in Cumulocity with that type, so firmware
+  offered for that type appears in its Firmware tab
 
 ### Requirement: The tiny-edge onboard command hands the tenant and password to the client
 

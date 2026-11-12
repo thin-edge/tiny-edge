@@ -88,3 +88,20 @@ func TestFindDeviceExitCodes(t *testing.T) {
 		t.Fatalf("forbidden: %v", err)
 	}
 }
+
+func TestRegisterWithTheDeviceType(t *testing.T) {
+	r := &fakeRunner{answers: map[string]string{"deviceregistration register-ca": `{}`}}
+	c := &Client{Run: r}
+	if err := c.Register("tedge-1", "Pump 7", "otp", "thin-edge.io-esp-idf-agent"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Register("tedge-2", "Pump 8", "otp", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.calls[0], "--type thin-edge.io-esp-idf-agent") {
+		t.Fatalf("no device type: %q", r.calls[0])
+	}
+	if strings.Contains(r.calls[1], "--type") {
+		t.Fatalf("a type although the device reported none: %q", r.calls[1])
+	}
+}

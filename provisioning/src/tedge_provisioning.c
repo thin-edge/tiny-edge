@@ -291,11 +291,14 @@ static const char *state_name(enum tedge_state state)
 
 static void info(const struct rpc_out *out)
 {
-	char id[65], host[65];
+	char id[65], host[65], type[48];
 	struct result r;
 
 	if (tedge_get_device_id(id, sizeof(id)) < 0) {
 		id[0] = '\0';
+	}
+	if (tedge_get_device_type(type, sizeof(type)) < 0) {
+		type[0] = '\0';
 	}
 	if (tedge_get_c8y_url(host, sizeof(host)) < 0) {
 		host[0] = '\0';
@@ -306,6 +309,9 @@ static void info(const struct rpc_out *out)
 	result_add(&r, TEDGE_IS_ENABLED(TEDGE_AUTH_C8Y_CA) ? "c8y-ca" : "bootstrap");
 	result_add(&r, host);
 	result_add(&r, state_name(tedge_get_state()));
+	/* Added after the first release: a tool that knows only five fields
+	 * ignores it, and a tool registers the device with this type. */
+	result_add(&r, type);
 	result_send(&r, out);
 }
 

@@ -54,11 +54,23 @@ func TestInfo(t *testing.T) {
 		return [][]byte{result(cmd, "1", "tedge-d405927b33d0", "c8y-ca", "", "awaiting-registration")}
 	})
 	info, err := c.Info(context.Background(), time.Second)
-	if err != nil || info.DeviceID != "tedge-d405927b33d0" || info.State != "awaiting-registration" {
+	if err != nil || info.DeviceID != "tedge-d405927b33d0" || info.State != "awaiting-registration" ||
+		info.DeviceType != "" {
 		t.Fatalf("%+v %v", info, err)
 	}
 	if lines := c.RecentLog(); len(lines) != 1 {
 		t.Fatalf("log: %q", lines)
+	}
+}
+
+func TestInfoWithDeviceType(t *testing.T) {
+	c := newFake(t, func(cmd byte, _ []byte) [][]byte {
+		return [][]byte{result(cmd, "1", "tedge-d405927b33d0", "c8y-ca", "",
+			"awaiting-registration", "thin-edge.io-esp-idf-agent")}
+	})
+	info, err := c.Info(context.Background(), time.Second)
+	if err != nil || info.DeviceType != "thin-edge.io-esp-idf-agent" {
+		t.Fatalf("%+v %v", info, err)
 	}
 }
 

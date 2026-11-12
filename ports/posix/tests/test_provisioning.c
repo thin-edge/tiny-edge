@@ -223,7 +223,8 @@ int main(void)
 {
 	char dir[] = "/tmp/tedge-provisioning-test-XXXXXX";
 	struct tedge_posix_config cfg = { 0 };
-	struct tedge_identity id = { .external_id = "tedge-prov-test" };
+	struct tedge_identity id = { .external_id = "tedge-prov-test",
+				     .type = "thin-edge.io-prov-test" };
 	struct frame f;
 	uint8_t payload[200];
 	char s[80];
@@ -256,6 +257,9 @@ int main(void)
 	CHECK(result_string(&f, 2, s, sizeof(s)) && strcmp(s, "c8y-ca") == 0);
 	CHECK(result_string(&f, 3, s, sizeof(s)) && strcmp(s, "") == 0);
 	CHECK(result_string(&f, 4, s, sizeof(s)) && strcmp(s, "stopped") == 0);
+	/* The device type, for the tool's registration. */
+	CHECK(result_string(&f, 5, s, sizeof(s)) &&
+	      strcmp(s, "thin-edge.io-prov-test") == 0);
 
 	/* The networks the board sees: strongest first, each once, no hidden
 	 * ones, then an empty result. */

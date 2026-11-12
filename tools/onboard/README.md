@@ -95,7 +95,10 @@ At the end you can set up another device.
   its own and stores no Cumulocity password.
 
 The tool registers the device in Cumulocity with a new one-time password,
-which the device uses once to get its certificate.
+which the device uses once to get its certificate. It registers the device
+with the device type its firmware reports, so firmware offered for that type
+shows up in the device's **Firmware** tab. A device whose firmware predates
+this gets the type `thin-edge.io`.
 
 ## If something goes wrong
 
