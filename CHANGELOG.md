@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/thin-edge/tiny-edge/compare/v0.5.0...v0.6.0) (2026-11-12)
+
+
+### Features
+
+* **onboard:** register devices with the type their firmware reports ([98fc339](https://github.com/thin-edge/tiny-edge/commit/98fc339b46272819c9aaeb186c604e69854d807d))
+* **onboard:** register devices with their firmware's type; fix the ESP-IDF component install ([fe360dd](https://github.com/thin-edge/tiny-edge/commit/fe360dda02f5a48d6e7b2a51d92206615f5eef82))
+
+
+### Bug Fixes
+
+* **esp-idf:** build the component when the component manager installs it ([57f96c9](https://github.com/thin-edge/tiny-edge/commit/57f96c9bd3b1ef71fd8e2b7d54ebc2189dedeb8b))
+
 ## [0.5.0](https://github.com/thin-edge/tiny-edge/compare/v0.4.0...v0.5.0) (2026-11-12)
 
 
