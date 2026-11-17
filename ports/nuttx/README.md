@@ -261,6 +261,14 @@ nothing across the change: its data partition moves.
   erases the settings and the device key of every board updated to it.
   Adding it takes a NuttX board change and a new layout.
 - Improv over BLE: set-up works over the USB serial console only.
+- Set-up on a second serial port. On boards with two USB connectors (the
+  ESP32-C6 and ESP32-S3 DevKitC), set-up works on the one labelled USB,
+  the console. Serving it on UART0 as well, behind the connector labelled
+  UART, was tried and dropped: opening UART0 while only the USB connector
+  was plugged in stopped the ESP32-S3 during start-up (enabling UART0
+  without opening it was fine), and with the console on USB nothing showed
+  why. The ESP32-C3-DevKitM, whose only connector reaches UART0, has its
+  console there instead.
 - Boards other than the ESP32-C6 and ESP32-S3; the ESP32-C3 builds (see Status).
 
 ## Status

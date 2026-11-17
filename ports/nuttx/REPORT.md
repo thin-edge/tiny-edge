@@ -203,6 +203,14 @@ this one merges.
     second heap region (`CONFIG_ESP32S3_SPIRAM`, `_MODE_OCT`,
     `CONFIG_MM_REGIONS=2`), internal RAM keeps 135 KB free, and log upload
     and a firmware update from Cumulocity work.
+33. **Set-up on UART0 beside the USB console stopped the ESP32-S3.** With
+    UART0 enabled and opened for set-up while only the board's USB
+    connector was plugged in, the S3 never connected, even with the port
+    opened on a thread of its own; with UART0 enabled but not opened it was
+    fine. Panic output goes to the USB console's low-level path, which
+    writes nothing, so the cause is not known (an unpowered USB-to-UART
+    chip holding RX low is the guess). Dropped; set-up stays on the
+    console, which on the ESP32-C3-DevKitM is UART0.
 
 ## Sizes
 
