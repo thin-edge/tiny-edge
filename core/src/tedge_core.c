@@ -23,6 +23,7 @@
 
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -389,8 +390,8 @@ static void client_thread(void *arg)
 		if (rc != 0) {
 			backoff = tedge_backoff_next(backoff,
 						     TEDGE_RECONNECT_BACKOFF_MAX_S);
-			TEDGE_LOG_WRN("connect failed (%d); retrying in %u s", rc,
-				backoff);
+			TEDGE_LOG_WRN("connect failed (%d); retrying in %" PRIu32
+				      " s", rc, backoff);
 			uint32_t got = tedge_port_event_wait(
 				&events, EV_STOP | EV_NET_DOWN, backoff * 1000);
 
@@ -445,7 +446,7 @@ static void client_thread(void *arg)
 		TEDGE_LOG_WRN("session ended (%d)", rc);
 		backoff = tedge_backoff_next(backoff,
 						     TEDGE_RECONNECT_BACKOFF_MAX_S);
-		TEDGE_LOG_INF("reconnecting in %u s", backoff);
+		TEDGE_LOG_INF("reconnecting in %" PRIu32 " s", backoff);
 		(void)tedge_port_event_wait(&events, EV_STOP, backoff * 1000);
 	}
 	tedge_set_state(TEDGE_STATE_STOPPED);
