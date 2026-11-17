@@ -22,7 +22,7 @@
 - [x] 3.3 Retry when going back to the stored network after a failed join, so a wrong password cannot leave the device offline
 - [x] 3.4 Add the `wifi_scan` hook with `wapi`'s scan
 - [ ] 3.5 On the C6, with a cleared data partition: `tedge-onboard` lists the board's networks, sets it up, and it connects; a wrong password brings it back to its stored network
-- [ ] 3.6 Check that log lines on the console do not break Improv frames during set-up
+- [x] 3.6 Check that log lines on the console do not break Improv frames during set-up (2026-11-17: four `tedge-onboard --reonboard` runs on the C6, three of them back to back, all connected; during each, the client logs to the same console while the frames are exchanged ("state: stopped", "discarding the certificate…", "provisioning: set up…", "awaiting-registration", "enrolled…"). Raising `log_level` to `dbg` for more traffic had no effect: the build's compile-time level is 3, and the parameter can only lower it)
 
 ## 4. Configuration on par with the other ports
 
@@ -57,14 +57,14 @@
 ## 8. Second chip
 
 - [ ] 8.1 On an ESP32-S3: tasks 2.5, 3.5, 5.6, and 7.1 (when a board is available)
-- [ ] 8.2 ESP32-C3: build with every feature and record flash and RAM; add it to CI if it fits
+- [x] 8.2 ESP32-C3: build with every feature and record flash and RAM; add it to CI if it fits (2026-11-17, `esp32c3-devkit`, board files copied from the C6's: every feature links, update image 1,403,748 B, dram0 241,520 of 321,296 B, about 80 KB of heap; reduced set 1,331,516 B, dram0 219,008 B, about 102 KB of heap. The agent on the C6 used about 151 KB of heap and peaked at 232 KB, so the full set is not expected to run on a C3; not added to CI, since only the link fit is known)
 
 ## 9. CI and documentation
 
 - [x] 9.1 Add `.github/workflows/nuttx.yml`: S3 and C6 with every feature, C6 reduced, in the port's container, on changes to `core/`, `provisioning/`, `ports/posix/`, `ports/common/`, or `ports/nuttx/`
 - [x] 9.2 Rewrite `ports/nuttx/README.md` like the ESP-IDF port's: use in an application, options, interface mapping, set-up, the flash layout, status per board, not in the port yet
 - [x] 9.3 Add NuttX to the top-level README's port table and port comparison
-- [ ] 9.4 Update `REPORT.md` with the final sizes and a short summary; keep it as the record of what NuttX needed
+- [x] 9.4 Update `REPORT.md` with the final sizes and a short summary; keep it as the record of what NuttX needed (2026-11-17: summary, status per stage, findings 24–31, sizes for the S3, C6 and C3 agents, line counts)
 - [ ] 9.5 Fix the two format warnings in `core/src/tedge_core.c` in a separate pull request (`PRIu32`)
 - [ ] 9.6 Offer the two USB serial driver fixes to NuttX upstream
 - [ ] 9.7 Confirm that `git diff main -- core/ provisioning/ include/tedge/port/` is empty

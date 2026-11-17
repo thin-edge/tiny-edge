@@ -1,7 +1,18 @@
 # NuttX trial: what was reused
 
-The record of the trial in `openspec/changes/nuttx-port`, kept up to date
-stage by stage. Sizes are measured, not estimated.
+The record of the NuttX port (`openspec/changes/nuttx-port`): what NuttX
+needed, and what it took from the code the other ports share. Sizes are
+measured, not estimated.
+
+**Summary.** tiny-edge runs on NuttX 13.1 through the POSIX port, with
+three POSIX options (thread stacks, the MAC by `SIOCGIFHWADDR`, no `exec()`)
+and two generic features moved into it (the shell command through `popen()`,
+SNTP). What is NuttX's own is the build glue (Make and CMake), Wi-Fi with
+`wapi`, set-up over USB, and firmware update through MCUboot: about 2,400
+lines. On an ESP32-C6, every feature the port offers works against
+Cumulocity with no program reading the USB port. NuttX itself needed
+patches to its ESP USB serial driver and to the ESP32-S3's MCUboot rules,
+both worth offering upstream.
 
 ## Status
 
@@ -9,9 +20,11 @@ stage by stage. Sizes are measured, not estimated.
 |---|---|---|
 | Build: tiny-edge, mbedTLS 4.1, sample agent | Builds and links | Builds and links |
 | 1. Connect over mTLS, send the `device` measurement | Not run (no board yet) | Works |
-| 2. Restart, settings on LittleFS, parameters, remote access | Not run | Restart and log upload work; parameters and remote access not run |
-| 3. Set-up with `tedge-onboard` | Not run | Works, `tedge-onboard` unchanged |
-| 4. Firmware update through MCUboot | Builds (MCUboot and the app) | Builds; MCUboot's swap and rollback work on the board; an update from Cumulocity not run yet |
+| 2. Restart, settings on LittleFS, parameters, remote access | Not run | Works: parameters persist across a restart; tunnels to the LAN; certificate renewal |
+| 3. Set-up with `tedge-onboard` | Not run | Works, `tedge-onboard` unchanged; from an erased data partition not run yet |
+| 4. Firmware update through MCUboot | Builds (MCUboot and the app) | Works: update from Cumulocity, rollback of an image that cannot connect, an interrupted download failed after the reset |
+| 5. Shell command, log upload, reduced set, CMake build | Builds | Works; crash dumps not in the port (finding 26) |
+| 6. 30 minutes with telemetry and tunnels, nothing reading the port | Not run | Works: steady heap, at most 63 % of any thread's stack |
 
 ## Reuse by port interface
 
@@ -24,10 +37,13 @@ stage by stage. Sizes are measured, not estimated.
 | `crypto.h` | POSIX port and `ports/common`, unchanged | None |
 | `time.h` | POSIX port, unchanged (NTP from the application) | None |
 | `device.h` | POSIX port | Option `TEDGE_POSIX_MAC_IOCTL`; field `restart` and option `TEDGE_POSIX_NO_EXEC` |
-| `firmware.h` | Not yet (stage 4) | |
+| `firmware.h` | New: `src/tedge_port_fw.c` (MCUboot through nuttx-apps' library) | None |
 | Provisioning transport | New: `src/tedge_provisioning_nuttx.c` (Improv Serial on the console) | None |
 
-`core/`, `provisioning/`, and `include/tedge/port/` are unchanged.
+`provisioning/` and `include/tedge/port/` are unchanged. `core/` has one
+change on this branch, 13 lines in `core/src/tedge_http*.c` (a download
+idle timeout, finding 24), which is to go in its own pull request before
+this one merges.
 
 ## Findings
 
@@ -68,9 +84,12 @@ stage by stage. Sizes are measured, not estimated.
 8. **48 KB of static RAM is the shared socket table** (`ports/common`,
    16 connections of about 3 KB). Not specific to NuttX, but it is two
    thirds of tiny-edge's static RAM here and worth sizing per port.
-9. **NuttX 13.1 has no CMake build for the ESP32-S3**, only for the C6. The
-   app has a Make build only so far; a `CMakeLists.txt` can be tested only
-   on the C6.
+9. **NuttX 13.1 has no CMake build for the ESP32-S3**, only for the C6.
+   The app builds with both on the C6 (`build.sh --cmake`). NuttX refuses a
+   CMake build in a tree configured for Make, so `--cmake` uses a worktree
+   of the same release; and CMake reads `.config` before `olddefconfig`
+   runs, so it starts from the board's full configuration, not its
+   `defconfig`.
 10. **The ESP USB serial driver needs two fixes, both in NuttX.** It
     receives into a fixed 64-byte buffer and discards what does not fit, so
     `tedge-onboard`'s onboard command (about 90 bytes) arrived cut and was
@@ -148,27 +167,57 @@ stage by stage. Sizes are measured, not estimated.
     status is not available", as POSIX defines it. A command's exit code
     is not available on NuttX; a command that fails to run is.
 
+24. **Firmware downloads timed out** (`-110`) with a fixed time limit for
+    the whole download. Larger receive buffers, an idle timeout instead of a
+    total one, and erasing flash a sector at a time made a 1.4 MB download
+    from Cumulocity complete. The idle timeout is a `core/` change.
+25. **Stack use cannot be read through the cloud shell.** `ps` is longer
+    than the result Cumulocity gets (about 220 characters). With
+    `CONFIG_STACK_COLORATION`, now on in the agent image, the sample offers
+    a `stacks` log type instead, read from procfs.
+26. **Crash dumps need NuttX board support.** NuttX opens the dump
+    partition (`CONFIG_BOARD_COREDUMP_MTDDEV`) in `nx_bringup()` before any
+    application runs, so the board code has to register it, and the ESP32
+    boards do not; the 4 MB layout also has no room left without shrinking
+    the data partition, which would erase updated devices.
+27. **The build's option check rejected the reduced agent.** The agent's
+    shell allow-list cannot apply once `configs/small.conf` turns the shell
+    off. The check now exempts the options of a feature a fragment turns
+    off on purpose; CI builds that combination.
+28. **A reduced image leaves the full image's fragments behind.** With log
+    upload or remote access off, the core sends neither `c8y_SupportedLogs`
+    nor the remote access twin, so the values of an earlier full image
+    stay on the device. A `core/` fix, not specific to NuttX.
+29. **`log_level` can be lowered at run time, not raised** above the
+    build's `CONFIG_TEDGE_LOG_LEVEL` (3): `dbg` is offered and accepted but
+    logs nothing more. Not specific to NuttX.
+30. **Log lines before the clock is set carry nonsense dates** (year
+    351425), from the same clock as finding 14.
+31. **The ESP32-C3 builds but probably cannot run every feature.** It
+    links (1.40 MB, dram0 241,520 of 321,296 B), leaving about 80 KB of
+    heap, where the agent used about 151 KB on the C6 and peaked at 232 KB.
+
 ## Sizes
 
 Images built from each board's `wifi` configuration, with and without
-tiny-edge (all features on except firmware update, shell command, and core
-dump; provisioning off).
+tiny-edge. "Agent" is the update image of `build.sh --agent` (every feature,
+provisioning on, MCUboot header), on 2026-11-17.
 
-| Board | Stock `wifi` image | With tiny-edge | Difference |
-|---|---|---|---|
-| ESP32-S3 (`esp32s3-devkit`) | 800,504 B | 1,155,508 B | +355,004 B |
-| ESP32-C6 (`esp32c6-devkitc`) | 985,700 B | 1,410,060 B | +424,360 B |
+| Board | Stock `wifi` image | Agent, every feature | Agent, reduced set | dram0 used (agent) |
+|---|---|---|---|---|
+| ESP32-S3 (`esp32s3-devkit`) | 800,504 B | 1,159,724 B | | 229,592 of 270,336 B |
+| ESP32-C6 (`esp32c6-devkitc`) | 985,700 B | 1,415,224 B (CMake: 1,415,852 B) | 1,343,192 B | 271,904 of 452,112 B |
+| ESP32-C3 (`esp32c3-devkit`), not run | | 1,403,748 B | 1,331,516 B | 241,520 of 321,296 B |
 
 tiny-edge's own static RAM (`.bss` and `.data`) on the S3 is about 72 KB,
-of which 48 KB is the socket table (finding 8). Free heap after a TLS
-connection is measured on the board in stage 1.
+of which 48 KB is the socket table (finding 8). On the C6 during a
+30-minute run with tunnels, the heap had about 96 KB free throughout, with
+the most ever in use 232 of 248 KB; the client's own heap held at 16 KB.
 
 ## Files
 
 | | Lines | What |
 |---|---|---|
-| Reused unchanged | | `core/`, `ports/common/`, `ports/posix/src/` apart from two files |
-| Changed in `ports/posix/` | | `os.h`, `tedge_port_os.c`, `tedge_port_device.c`, `posix.h`, `CMakeLists.txt` |
-| New in `ports/nuttx/` | | Build glue, configurations, the sample agent |
-
-The line counts are filled in at the end of the trial.
+| Reused unchanged | | `core/` (apart from finding 24), `provisioning/`, `ports/common/`, `include/tedge/port/` |
+| Changed in `ports/posix/` | +537, -15 | Options for NuttX, the shell command and SNTP as generic features, and their tests |
+| New in `ports/nuttx/` | 2,358 | Build glue (Make, CMake, Kconfig, `build.sh`, Dockerfile), configurations, Wi-Fi, set-up over USB, firmware update, the sample agent |

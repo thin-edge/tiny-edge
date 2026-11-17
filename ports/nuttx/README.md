@@ -246,21 +246,28 @@ nothing across the change: its data partition moves.
   erases the settings and the device key of every board updated to it.
   Adding it takes a NuttX board change and a new layout.
 - Improv over BLE: set-up works over the USB serial console only.
-- Boards other than the ESP32-C6 and ESP32-S3.
+- Boards other than the ESP32-C6 and ESP32-S3; the ESP32-C3 builds (see Status).
 
 ## Status
 
-Builds for the ESP32-C6 and the ESP32-S3 with every feature, and for the
-ESP32-C6 with a reduced set. The agent with every feature is 1.41 MB on the
-ESP32-C6 and 1.16 MB on the ESP32-S3, in a 1.5 MB slot.
+Builds for the ESP32-C6 and the ESP32-S3 with every feature, for the
+ESP32-C6 with a reduced set, and for the ESP32-C6 with NuttX's CMake build
+(all four in CI). The agent with every feature is 1.41 MB on the ESP32-C6
+and 1.16 MB on the ESP32-S3, in a 1.5 MB slot.
 
-Tested on an ESP32-C6 against a Cumulocity tenant: set-up with
-`tedge-onboard`, certificate enrollment, the MQTT connection, the twin
-fragments, measurements, the health measurement, log upload, and a restart
-from the cloud, with and without a program reading the USB port. MCUboot's
-swap and rollback were tested on the board with an image written to the
-secondary slot.
+Tested on an ESP32-C6 against a Cumulocity tenant, with no program reading
+the USB port: set-up with `tedge-onboard`, certificate enrollment and
+renewal, the MQTT connection, the twin fragments, measurements, the health
+measurement, log upload, a restart from the cloud, shell commands,
+parameters that persist across a restart, remote access, a firmware update
+from Cumulocity and its rollback, an operation interrupted by a reset, the
+reduced set, the CMake build, and a 30-minute run with telemetry and
+tunnels (steady heap, at most 63 % of any thread's stack).
 
-Not tested on a board yet: a firmware update from Cumulocity, shell
-commands, parameters, remote access, certificate renewal, the Wi-Fi scan,
-and anything on the ESP32-S3.
+Not tested on a board yet: set-up from an erased data partition with the
+Wi-Fi scan, and anything on the ESP32-S3.
+
+The ESP32-C3 (`esp32c3-devkit`) builds but has not run. Every feature
+links (1.40 MB image; dram0 241,520 of 321,296 B), but that leaves about
+80 KB of heap, where the agent on the ESP32-C6 used about 151 KB and peaked
+at 232 KB. The reduced set leaves about 102 KB. It is not in CI.
