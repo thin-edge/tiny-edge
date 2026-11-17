@@ -21,7 +21,7 @@
 - [x] 3.2 On the C6: `tedge-onboard --reonboard` sets the device up and it connects
 - [x] 3.3 Retry when going back to the stored network after a failed join, so a wrong password cannot leave the device offline
 - [x] 3.4 Add the `wifi_scan` hook with `wapi`'s scan
-- [ ] 3.5 On the C6, with a cleared data partition: `tedge-onboard` lists the board's networks, sets it up, and it connects; a wrong password brings it back to its stored network
+- [x] 3.5 On the C6, with a cleared data partition: `tedge-onboard` lists the board's networks, sets it up, and it connects; a wrong password brings it back to its stored network (2026-11-17, run by the maintainer: data partition erased, `tedge-onboard` listed the networks, set the board up and it connected; a wrong password brought it back to its stored network)
 - [x] 3.6 Check that log lines on the console do not break Improv frames during set-up (2026-11-17: four `tedge-onboard --reonboard` runs on the C6, three of them back to back, all connected; during each, the client logs to the same console while the frames are exchanged ("state: stopped", "discarding the certificate…", "provisioning: set up…", "awaiting-registration", "enrolled…"). Raising `log_level` to `dbg` for more traffic had no effect: the build's compile-time level is 3, and the parameter can only lower it)
 
 ## 4. Configuration on par with the other ports
