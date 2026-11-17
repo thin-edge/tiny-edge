@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.1](https://github.com/thin-edge/tiny-edge/compare/v0.6.0...v0.6.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **core:** print the reconnect wait with PRIu32 ([ad7752b](https://github.com/thin-edge/tiny-edge/commit/ad7752bc6462100b686b8e70877bef2c17097e3e))
+* **core:** print the reconnect wait with PRIu32 ([f205e8b](https://github.com/thin-edge/tiny-edge/commit/f205e8b17a9cbcfe8a667d68c05c83350b4e923b))
+* **core:** time a firmware download out only when it stops moving ([9fd1651](https://github.com/thin-edge/tiny-edge/commit/9fd16514f28fda79f57466ea480318f5bfe554f2))
+* **core:** time a firmware download out only when it stops moving ([a1f5278](https://github.com/thin-edge/tiny-edge/commit/a1f527832bd107bbe206952bb33928f9a80ec9b8))
+
 ## [0.6.0](https://github.com/thin-edge/tiny-edge/compare/v0.5.0...v0.6.0) (2026-11-12)
 
 
