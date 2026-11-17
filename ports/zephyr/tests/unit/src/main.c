@@ -1919,6 +1919,10 @@ static int http_on_body(int status, const void *data, size_t len, void *ctx)
 	return 0;
 }
 
+/* How long each piece of a faked response takes to arrive (see
+ * tedge_port_recv() below). */
+static int32_t net_recv_delay_ms;
+
 static void http_before(void *fixture)
 {
 	ARG_UNUSED(fixture);
@@ -1928,6 +1932,7 @@ static void http_before(void *fixture)
 	http_location[0] = '\0';
 	http_location_done = false;
 	http_body_refuse = 0;
+	net_recv_delay_ms = 0;
 }
 
 /* Feeds @p text in pieces of @p step bytes, as the network might. */
@@ -2099,6 +2104,9 @@ int tedge_port_recv(int conn, void *buf, size_t len, uint32_t timeout_ms)
 
 	ARG_UNUSED(conn);
 	ARG_UNUSED(timeout_ms);
+	if (net_recv_delay_ms > 0) {
+		k_msleep(net_recv_delay_ms);
+	}
 	memcpy(buf, net_reply + net_reply_off, n);
 	net_reply_off += n;
 	return (int)n; /* 0 once it is all out: the server closed */
@@ -2181,6 +2189,43 @@ ZTEST(tedge_http, test_exchange_cut_short)
 	net_reply = "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\npart";
 	net_reply_len = strlen(net_reply);
 	zassert_equal(tedge_http_exchange(3, &req, &status), -ECONNRESET);
+}
+
+/* A response that keeps arriving, 7 bytes every 60 ms, for longer than
+ * the timeout: a timeout for the whole exchange ends it, an idle timeout
+ * does not. */
+static int slow_exchange(bool idle, int *status)
+{
+	uint8_t buf[64];
+	struct tedge_http_request req = {
+		.method = "GET", .host = "h", .path = "/",
+		.on_body = http_on_body, .buf = buf, .buf_len = sizeof(buf),
+		.timeout_ms = 200,
+		.timeout_is_idle = idle,
+	};
+
+	net_sent_len = 0;
+	net_reply_off = 0;
+	net_reply = "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n{\"id\":1}";
+	net_reply_len = strlen(net_reply);
+	net_recv_delay_ms = 60;
+	return tedge_http_exchange(3, &req, status);
+}
+
+ZTEST(tedge_http, test_exchange_timeout_is_total)
+{
+	int status = 0;
+
+	zassert_equal(slow_exchange(false, &status), -ETIMEDOUT);
+}
+
+ZTEST(tedge_http, test_exchange_timeout_is_idle)
+{
+	int status = 0;
+
+	zassert_ok(slow_exchange(true, &status));
+	zassert_equal(status, 200);
+	zassert_str_equal(http_body, "{\"id\":1}");
 }
 
 ZTEST_SUITE(tedge_http, NULL, NULL, http_before, NULL, NULL);
