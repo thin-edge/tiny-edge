@@ -54,6 +54,9 @@ add_library(tedge STATIC
   ${TEDGE_ROOT}/ports/common/src/tedge_mbedtls_key.c
 )
 add_library(tedge::tedge ALIAS tedge)
+if(TEDGE_SHELL_COMMAND)
+  target_sources(tedge PRIVATE src/tedge_shell_cmd.c)
+endif()
 
 set_target_properties(tedge PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON
   C_EXTENSIONS OFF)
@@ -66,6 +69,18 @@ target_compile_definitions(tedge PRIVATE
   _DEFAULT_SOURCE
   _DARWIN_C_SOURCE
 )
+# For POSIX systems that are RTOSes (NuttX), off for Linux and macOS:
+# threads get the stack sizes the core asks for instead of the system's
+# default, the MAC address comes from SIOCGIFHWADDR when getifaddrs()
+# lists no link-layer entries, and a restart needs no exec().
+option(TEDGE_POSIX_THREAD_STACKS "Give each thread the stack size the core asks for" OFF)
+option(TEDGE_POSIX_MAC_IOCTL "Read the MAC address with SIOCGIFHWADDR" OFF)
+option(TEDGE_POSIX_NO_EXEC "The system has no exec(): restart only through tedge_posix_config.restart" OFF)
+foreach(_opt TEDGE_POSIX_THREAD_STACKS TEDGE_POSIX_MAC_IOCTL TEDGE_POSIX_NO_EXEC)
+  if(${_opt})
+    target_compile_definitions(tedge PUBLIC ${_opt})
+  endif()
+endforeach()
 option(TEDGE_WERROR "Treat warnings in the client's own code as errors" OFF)
 target_compile_options(tedge PRIVATE -Wall -Wextra -Wno-unused-parameter
   -Wno-sign-compare $<$<BOOL:${TEDGE_WERROR}>:-Werror>)
