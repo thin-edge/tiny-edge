@@ -193,7 +193,14 @@ echo "CONFIG_TINY_EDGE_FIRMWARE_VERSION=\"$version\"" > "$version_conf"
 fragments+=("$version_conf")
 cat "${fragments[@]}" >> "$cfg"
 if [[ $cmake == 1 ]]; then
-	cmake --build "$bd" -t olddefconfig >/dev/null
+	# Kconfig's olddefconfig, as NuttX's CMake build runs it, not its
+	# olddefconfig target: CMake would read the half-merged .config first,
+	# with features on and their defaults not yet filled in (MCUboot's
+	# version, which nuttx-apps then fails to download).
+	(cd "$nx" && env APPSDIR="$ws/apps" APPSBINDIR="$bd/apps" BINDIR="$bd" \
+		EXTERNALDIR=dummy DRIVERS_PLATFORM_DIR=dummy HOST_LINUX=y \
+		HOST_MACOS=n HOST_BSD=n HOST_WINDOWS=n HOST_OTHER=n \
+		KCONFIG_CONFIG="$cfg" olddefconfig >/dev/null)
 else
 	make olddefconfig >/dev/null
 fi
