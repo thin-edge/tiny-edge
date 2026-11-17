@@ -56,7 +56,7 @@
 
 ## 8. Second chip
 
-- [ ] 8.1 On an ESP32-S3: tasks 2.5, 3.5, 5.6, and 7.1 (when a board is available)
+- [ ] 8.1 On an ESP32-S3: tasks 2.5, 3.5, 5.6, and 7.1 (when a board is available) (2026-11-17, ESP32-S3-DevKitC-1 N16R8, eu-latest device 5160686774: set-up with `tedge-onboard` over the USB port works and 2.5 passes. With the S3 configuration as it is, the heap is 192 KB, its high-water mark reached 191 KB, and log upload failed ("could not resolve its own id"): no room for a second TLS session. With the board's octal PSRAM as a second heap region (test fragment `CONFIG_ESP32S3_SPIRAM`, `_MODE_OCT`, `CONFIG_MM_REGIONS=2`), log upload works, 7.1 passes, and 5.6 passes: 1.16 MB in about 2.5 min, restart, "0.6.9 confirmed". Open: how the S3 configuration gets PSRAM, and the wrong-password part of 3.5 on the S3)
 - [x] 8.2 ESP32-C3: build with every feature and record flash and RAM; add it to CI if it fits (2026-11-17, `esp32c3-devkit`, board files copied from the C6's: every feature links, update image 1,403,748 B, dram0 241,520 of 321,296 B, about 80 KB of heap; reduced set 1,331,516 B, dram0 219,008 B, about 102 KB of heap. The agent on the C6 used about 151 KB of heap and peaked at 232 KB, so the full set is not expected to run on a C3; not added to CI, since only the link fit is known)
 
 ## 9. CI and documentation

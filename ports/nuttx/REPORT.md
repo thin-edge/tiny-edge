@@ -193,6 +193,13 @@ this one merges.
     logs nothing more. Not specific to NuttX.
 30. **Log lines before the clock is set carry nonsense dates** (year
     351425), from the same clock as finding 14.
+32. **The ESP32-S3 needs its PSRAM for every feature.** Without it the
+    heap is 192 KB, and the MQTT session and Wi-Fi leave too little for the
+    second TLS session of a log upload or a firmware download (high-water
+    mark 191 KB; the upload failed). With an N16R8's octal PSRAM as a
+    second heap region (`CONFIG_ESP32S3_SPIRAM`, `_MODE_OCT`,
+    `CONFIG_MM_REGIONS=2`), internal RAM keeps 135 KB free, and log upload
+    and a firmware update from Cumulocity work.
 31. **The ESP32-C3 builds but probably cannot run every feature.** It
     links (1.40 MB, dram0 241,520 of 321,296 B), leaving about 80 KB of
     heap, where the agent used about 151 KB on the C6 and peaked at 232 KB.
