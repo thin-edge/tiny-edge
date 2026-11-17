@@ -138,6 +138,15 @@ command that does not finish within `CONFIG_TEDGE_SHELL_COMMAND_TIMEOUT_S`
 is reported as failed but keeps running, so keep commands that can block
 off the list. The agent allows `free`, `uname`, `uptime`, and `ps`.
 
+## Stack use
+
+The agent image is built with `CONFIG_STACK_COLORATION`, and the agent then
+offers a second log type, `stacks`: one line per thread with its stack
+size, the most of it ever used, and the share, read from procfs when the
+log is requested. Request it like any log (Device Management, Logs tab) to
+check the headroom on a device in the field. `ps` cannot do this from the
+cloud: its output is longer than the result Cumulocity gets.
+
 ## Set a device up over USB (tedge-onboard)
 
 With `CONFIG_TEDGE_PROVISIONING=y`, [`tedge-onboard`](../../tools/onboard/README.md)

@@ -20,6 +20,7 @@
 #include <tedge/posix.h>
 #include <tedge/tedge.h>
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <malloc.h>
@@ -84,6 +85,90 @@ static void board_reset(void)
 static const struct tedge_hooks hooks = {
 	.on_state = on_state,
 };
+
+#if defined(CONFIG_STACK_COLORATION) && defined(CONFIG_TEDGE_LOG_UPLOAD)
+/* --- The "stacks" log --------------------------------------------------- */
+
+/* Each thread's stack size and the most of it ever used, from procfs, as a
+ * log type the cloud can request at any time: a long run can then check
+ * the headroom without a program reading the USB port. The client may call
+ * the reader twice for one request (to measure, then to send), so one
+ * snapshot serves both. */
+static char stacks[2048];
+static size_t stacks_len;
+static struct timespec stacks_at;
+
+/* The value after @p key in a procfs file, or "" when it has none. */
+static void proc_field(const char *path, const char *key, char *out,
+		       size_t len)
+{
+	char line[64];
+	FILE *f = fopen(path, "r");
+
+	out[0] = '\0';
+	if (f == NULL) {
+		return;
+	}
+	while (fgets(line, sizeof(line), f) != NULL) {
+		if (strncmp(line, key, strlen(key)) == 0) {
+			const char *v = line + strlen(key);
+
+			v += strspn(v, " \t");
+			snprintf(out, len, "%.*s", (int)strcspn(v, "\n"), v);
+			break;
+		}
+	}
+	fclose(f);
+}
+
+static void snapshot_stacks(void)
+{
+	DIR *dir = opendir("/proc");
+	struct dirent *de;
+	size_t n;
+
+	n = snprintf(stacks, sizeof(stacks), "%5s %-20s %6s %6s %4s\n", "PID",
+		     "NAME", "SIZE", "USED", "USE");
+	while (dir != NULL && (de = readdir(dir)) != NULL &&
+	       n < sizeof(stacks)) {
+		char path[48], name[24], size[16], used[16];
+		long sz, us;
+
+		if (de->d_name[0] < '0' || de->d_name[0] > '9') {
+			continue;
+		}
+		snprintf(path, sizeof(path), "/proc/%s/status", de->d_name);
+		proc_field(path, "Name:", name, sizeof(name));
+		snprintf(path, sizeof(path), "/proc/%s/stack", de->d_name);
+		proc_field(path, "StackSize:", size, sizeof(size));
+		proc_field(path, "StackUsed:", used, sizeof(used));
+		sz = strtol(size, NULL, 10);
+		us = strtol(used, NULL, 10);
+		n += snprintf(stacks + n, sizeof(stacks) - n,
+			      "%5s %-20.20s %6ld %6ld %3ld%%\n", de->d_name,
+			      name, sz, us, sz > 0 ? us * 100 / sz : 0);
+	}
+	if (dir != NULL) {
+		closedir(dir);
+	}
+	stacks_len = n < sizeof(stacks) ? n : sizeof(stacks) - 1;
+}
+
+static int read_stacks(const struct tedge_log_request *req,
+		       tedge_write_fn write, void *ctx, void *user_data)
+{
+	struct timespec now;
+
+	(void)req;
+	(void)user_data;
+	(void)clock_gettime(CLOCK_MONOTONIC, &now);
+	if (stacks_len == 0 || now.tv_sec - stacks_at.tv_sec > 5) {
+		snapshot_stacks();
+		stacks_at = now;
+	}
+	return write(ctx, stacks, stacks_len);
+}
+#endif
 
 /* The device's own vitals, as the other ports' agents send them. */
 static void publish_vitals(void)
@@ -154,6 +239,9 @@ int main(int argc, char *argv[])
 		printf("agent: the client did not start\n");
 		return EXIT_FAILURE;
 	}
+#if defined(CONFIG_STACK_COLORATION) && defined(CONFIG_TEDGE_LOG_UPLOAD)
+	(void)tedge_register_log_type("stacks", read_stacks, NULL);
+#endif
 	if (host != NULL) {
 		(void)tedge_set_c8y_url(host);
 	}

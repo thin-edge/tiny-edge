@@ -48,10 +48,10 @@
 
 ## 7. Device management on the board
 
-- [ ] 7.1 On the C6: change a parameter set, restart, and check that the values persist
-- [ ] 7.2 On the C6: open a remote access tunnel
-- [ ] 7.3 On the C6: an operation interrupted by a reset is reported as failed after the reboot
-- [ ] 7.4 On the C6: a 30-minute session with telemetry and a tunnel, no program reading the port; check stack use and free heap
+- [x] 7.1 On the C6: change a parameter set, restart, and check that the values persist (2026-11-17, eu-latest device 9260855432: `tiny_edge.health_interval_s` 900 → 600, restart from the cloud, the board republished 600 from storage; set back to 900)
+- [x] 7.2 On the C6: open a remote access tunnel (2026-11-17: passthrough to the LAN router 192.168.188.1:80 under the `lan` policy; three fetches through `c8y remoteaccess server`, each HTTP 200 with the same 7,659 B page as a direct fetch, 4.4–5.8 s each including tunnel set-up; Opened/Closed events with byte counts; sessions back to 0; config deleted)
+- [x] 7.3 On the C6: an operation interrupted by a reset is reported as failed after the reboot (2026-11-17: c8y_Firmware with a 1.4 MB image, board reset over USB at 20 % downloaded; 9 s later the operation was FAILED "the device restarted while the operation was running"; the board stayed on 0.6.3)
+- [x] 7.4 On the C6: a 30-minute session with telemetry and a tunnel, no program reading the port; check stack use and free heap (2026-11-17, 0.6.4 with `CONFIG_STACK_COLORATION` and the agent's new `stacks` log type, 07:05–07:35 UTC, nothing on the USB port: 52 of 52 tunnel fetches through the C6 (HTTP 200, 5.0 s average, 7.6 s max); 31 `device` measurements with no gap over 61 s and no reboot; client heap 16,135 B and 0 dropped messages throughout; `free` 96.6 → 96.1 → 96.4 KB free. Stacks at the end: highest 63 % (5,212 of 8,160 B), all others ≤ 36 %. Concern: heap `maxused` reached 232 of 248 KB, about 15 KB headroom at the peak, during tunnels)
 - [ ] 7.5 Certificate renewal: check it with a short renewal window, or record why not
 
 ## 8. Second chip
