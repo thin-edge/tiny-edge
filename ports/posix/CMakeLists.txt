@@ -76,6 +76,16 @@ target_compile_definitions(tedge PRIVATE
 option(TEDGE_POSIX_THREAD_STACKS "Give each thread the stack size the core asks for" OFF)
 option(TEDGE_POSIX_MAC_IOCTL "Read the MAC address with SIOCGIFHWADDR" OFF)
 option(TEDGE_POSIX_NO_EXEC "The system has no exec(): restart only through tedge_posix_config.restart" OFF)
+if(TEDGE_POSIX_MAC_IOCTL)
+  # Linux and NuttX have it; macOS and the BSDs do not, and list the MAC
+  # through getifaddrs() instead, which is what the port does without it.
+  include(CheckSymbolExists)
+  check_symbol_exists(SIOCGIFHWADDR "sys/ioctl.h;net/if.h" TEDGE_HAVE_SIOCGIFHWADDR)
+  if(NOT TEDGE_HAVE_SIOCGIFHWADDR)
+    message(FATAL_ERROR "TEDGE_POSIX_MAC_IOCTL needs SIOCGIFHWADDR, which "
+      "this system does not have; leave it off here")
+  endif()
+endif()
 foreach(_opt TEDGE_POSIX_THREAD_STACKS TEDGE_POSIX_MAC_IOCTL TEDGE_POSIX_NO_EXEC)
   if(${_opt})
     target_compile_definitions(tedge PUBLIC ${_opt})
