@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The NuttX port: the agent built for an Xtensa and a RISC-V chip with every
+# feature, booting through MCUboot, and once with a reduced feature set, in
+# the port's own container (ports/nuttx/docker).
+name: nuttx
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: NuttX, ${{ matrix.board }}, ${{ matrix.features }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: esp32c6-devkitc
+            features: all
+            args: --agent
+          - board: esp32s3-devkit
+            features: all
+            args: --agent
+          - board: esp32c6-devkitc
+            features: small
+            args: --extra /ws/tiny-edge/ports/nuttx/configs/small.conf
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Container
+        uses: docker/build-push-action@v6
+        with:
+          context: ports/nuttx/docker
+          tags: tiny-edge-nuttx
+          load: true
+          cache-from: type=gha,scope=nuttx
+          cache-to: type=gha,scope=nuttx,mode=max
+
+      - name: Build
+        run: |
+          docker run --rm -v "$PWD":/ws/tiny-edge -e NUTTX_WS=/ws/nx \
+            tiny-edge-nuttx bash -c '
+              /ws/tiny-edge/ports/nuttx/scripts/build.sh ${{ matrix.board }} \
+                ${{ matrix.args }} --out /ws/tiny-edge/out &&
+              ls -l /ws/tiny-edge/out'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuttx-${{ matrix.board }}-${{ matrix.features }}
+          path: out/*.bin
+          if-no-files-found: error

@@ -52,3 +52,16 @@ jobs:
             -DFETCHCONTENT_BASE_DIR=$PWD/build/_deps
           cmake --build build-small -j4
           ctest --test-dir build-small --output-on-failure
+
+      # The options for POSIX systems that are RTOSes (NuttX), and the
+      # features only they turn on by default: the shell command through
+      # popen() and the clock from SNTP.
+      - name: RTOS options, shell command, SNTP
+        run: |
+          cmake -S ports/posix -B build-rtos -DTEDGE_WERROR=ON \
+            -DTEDGE_POSIX_THREAD_STACKS=ON -DTEDGE_POSIX_MAC_IOCTL=ON \
+            -DTEDGE_POSIX_NO_EXEC=ON -DTEDGE_SNTP=ON \
+            -DTEDGE_SHELL_COMMAND=ON -DTEDGE_SHELL_COMMAND_ALLOW_LIST="uname,echo" \
+            -DFETCHCONTENT_BASE_DIR=$PWD/build/_deps
+          cmake --build build-rtos -j4
+          ctest --test-dir build-rtos --output-on-failure

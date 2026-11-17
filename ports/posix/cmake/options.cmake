@@ -54,6 +54,10 @@ tedge_option(TEDGE_HEAP_SIZE INT 16384 "Bytes the client may allocate (its own h
 tedge_option(TEDGE_DEVICE_ID_PREFIX STRING "tedge" "Default external ID prefix")
 tedge_option(TEDGE_DEVICE_TYPE STRING "thin-edge.io-posix" "Default device type")
 tedge_option(TEDGE_RECONNECT_BACKOFF_MAX_S INT 300 "Longest wait between reconnect attempts (s)")
+# Off on Linux and macOS, where the system keeps the clock. A POSIX RTOS
+# whose clock nobody else sets (NuttX) turns it on, as ESP-IDF does.
+tedge_option(TEDGE_SNTP BOOL OFF "Set the clock with SNTP when it is not already valid")
+tedge_option(TEDGE_SNTP_SERVER STRING "pool.ntp.org" "SNTP server")
 # Thread sizes and the priority are the RTOS's concern: on POSIX each thread
 # gets the system's default stack and scheduling. The core still names them.
 tedge_derived(TEDGE_THREAD_STACK_SIZE INT 6144)
@@ -121,6 +125,14 @@ tedge_option(TEDGE_CERT_RENEW_BEFORE_DAYS INT 30 "Renew when this many days of l
 tedge_option(TEDGE_CERT_RENEW_ALARM_DAYS INT 7 "Raise an alarm when this many days are left and renewal failed")
 tedge_option(TEDGE_CERT_RENEW_CHECK_HOURS INT 24 "Hours between certificate checks")
 
+# Off unless asked for: compiling it in is not consent to run commands,
+# and the allow-list below refuses everything while it is empty.
+tedge_option(TEDGE_SHELL_COMMAND BOOL OFF "Shell command operation (c8y_Command), through popen()")
+tedge_option(TEDGE_SHELL_COMMAND_ALLOW_LIST STRING "" "Commands the cloud may run (comma-separated prefixes)")
+tedge_option(TEDGE_SHELL_COMMAND_TIMEOUT_S INT 30 "Seconds before a command is reported as timed out")
+tedge_option(TEDGE_SHELL_COMMAND_OUTPUT_BYTES INT 512 "Output kept from a command (bytes)")
+tedge_option(TEDGE_SHELL_COMMAND_STACK_SIZE INT 4096 "Stack of the thread a command runs on (bytes)")
+
 tedge_option(TEDGE_REMOTE_ACCESS BOOL ON "Remote access (tunnel to the device and its network)")
 tedge_choice(TEDGE_REMOTE_ACCESS_TARGETS lan "Which hosts a tunnel may reach" lan list local)
 foreach(_policy LAN LIST LOCAL)
@@ -156,8 +168,8 @@ if(NOT TEDGE_PROVISIONING)
 endif()
 
 # Not in this port yet: each needs a POSIX design of its own (an image
-# format and a launcher that can roll back; a command runner; crash dumps).
-foreach(_missing TEDGE_FIRMWARE_UPDATE TEDGE_SHELL_COMMAND TEDGE_COREDUMP)
+# format and a launcher that can roll back; crash dumps).
+foreach(_missing TEDGE_FIRMWARE_UPDATE TEDGE_COREDUMP)
   if(${_missing})
     message(FATAL_ERROR "${_missing} is not available in the POSIX port yet")
   endif()

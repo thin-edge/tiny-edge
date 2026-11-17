@@ -50,6 +50,10 @@ struct tedge_posix_config {
 	 *  restart starts it again with execv(). NULL makes a restart end the
 	 *  process with TEDGE_POSIX_EXIT_RESTART instead. */
 	char *const *argv;
+	/** How a restart restarts: a function that does not return, such as
+	 *  a board reset on a POSIX RTOS (NuttX's boardctl(BOARDIOC_RESET)).
+	 *  NULL restarts the process as argv says. */
+	void (*restart)(void);
 };
 
 /**

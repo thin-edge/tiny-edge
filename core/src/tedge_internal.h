@@ -163,6 +163,8 @@ struct tedge_download {
 	tedge_sink_fn sink;
 	void (*progress)(int64_t written, void *user_data);
 	void *user_data;
+	/** The longest wait for the server, while connecting and then for each
+	 *  part of the response: not a limit on the whole transfer. */
 	int timeout_ms;
 	int64_t written; /* out */
 	int64_t total;   /* out: Content-Length, 0 when the server omits it */

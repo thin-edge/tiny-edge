@@ -1,0 +1,76 @@
+## 1. Build environment (done in the trial)
+
+- [x] 1.1 Pin NuttX and nuttx-apps (`nuttx-13.1.0`) and record it in `ports/nuttx/README.md`
+- [x] 1.2 Add `ports/nuttx/docker/` with the Xtensa and RISC-V ESP toolchains
+- [x] 1.3 Write `ports/nuttx/scripts/build.sh`: clone the pinned NuttX, link the app, configure a board, build, and check that every option took
+- [x] 1.4 Patch NuttX's ESP USB serial driver in the build script (receive buffer, bounded wait), failing when a patch no longer applies
+- [x] 1.5 Clean the build when the configuration changes
+
+## 2. Connect and report (done in the trial, on the ESP32-C6)
+
+- [x] 2.1 App skeleton: `Kconfig`, `Make.defs`, `Makefile`; Make source list generated from `core/sources.cmake` and `provisioning/sources.cmake`
+- [x] 2.2 Build mbedTLS 4.1 in the app
+- [x] 2.3 POSIX port options: `TEDGE_POSIX_THREAD_STACKS`, `TEDGE_POSIX_MAC_IOCTL`, `TEDGE_POSIX_NO_EXEC`, and the `restart` field; POSIX tests on Linux and macOS with each on and off
+- [x] 2.4 Sample agent: stored Wi-Fi, the clock from the network at every start, the client, the `device` measurement; non-blocking console output
+- [x] 2.5 On the C6: connect over mTLS; check `c8y_Agent`, `tedge_OS`, `c8y_Hardware`, and the measurement in Cumulocity
+- [x] 2.6 On the C6: restart from the cloud and log upload, with no program reading the USB port
+
+## 3. Set-up over USB on par with ESP-IDF
+
+- [x] 3.1 Improv Serial on the console (`src/tedge_provisioning_nuttx.c`); store the received network on LittleFS
+- [x] 3.2 On the C6: `tedge-onboard --reonboard` sets the device up and it connects
+- [x] 3.3 Retry when going back to the stored network after a failed join, so a wrong password cannot leave the device offline
+- [x] 3.4 Add the `wifi_scan` hook with `wapi`'s scan
+- [ ] 3.5 On the C6, with a cleared data partition: `tedge-onboard` lists the board's networks, sets it up, and it connects; a wrong password brings it back to its stored network
+- [ ] 3.6 Check that log lines on the console do not break Improv frames during set-up
+
+## 4. Configuration on par with the other ports
+
+- [x] 4.1 Align the Kconfig menu with the ESP-IDF component's `CONFIG_TEDGE_*` names, defaults, and help; keep `CONFIG_TINY_EDGE_*` for the app's own settings
+- [ ] 4.2 Add `CMakeLists.txt` for NuttX's CMake build, and check it on the C6
+- [ ] 4.3 Add a reduced configuration (no firmware update, shell command, log upload, or remote access) and check that it builds and advertises only what it has
+
+## 5. Firmware update through MCUboot
+
+- [x] 5.1 Build NuttX's MCUboot bootloader and an MCUboot-format app for the C6; run `mcuboot_update_agent` on the board to confirm the swap, trial boot, and rollback
+- [x] 5.2 Choose the slot and data partition layout for 8 MB flash; set it in the board configurations; make the build fail when the image does not fit its slot
+- [x] 5.3 Add `ports/nuttx/src/tedge_port_fw.c`: write the secondary slot, mark it pending, confirm on the core's request, and report the running version
+- [x] 5.4 Sign the image with `imgtool` in the build script, with the version the image reports
+- [x] 5.5 Write the flash steps for a new board (bootloader, slot, data partition) into the README
+- [x] 5.6 On the C6: install a newer image from Cumulocity; check the restart, confirmation, version, and operation status
+- [x] 5.7 On the C6: install an image that cannot connect; check the rollback and the failed operation
+
+## 6. Shell command and crash dumps
+
+- [x] 6.1 Add `ports/nuttx/src/tedge_shell_cmd.c`: allow-list, `popen()`, output limit, timeout; enable `system/popen` in the configuration
+- [x] 6.2 On the C6: an allowed command returns its output; a command not allowed fails with the reason
+- [ ] 6.3 Check NuttX 13.1's core dump to a block device on the C6; if it works, offer it as a log type through `tedge_port_coredump_init()`, else record it under "not in this port yet"
+
+## 7. Device management on the board
+
+- [ ] 7.1 On the C6: change a parameter set, restart, and check that the values persist
+- [ ] 7.2 On the C6: open a remote access tunnel
+- [ ] 7.3 On the C6: an operation interrupted by a reset is reported as failed after the reboot
+- [ ] 7.4 On the C6: a 30-minute session with telemetry and a tunnel, no program reading the port; check stack use and free heap
+- [ ] 7.5 Certificate renewal: check it with a short renewal window, or record why not
+
+## 8. Second chip
+
+- [ ] 8.1 On an ESP32-S3: tasks 2.5, 3.5, 5.6, and 7.1 (when a board is available)
+- [ ] 8.2 ESP32-C3: build with every feature and record flash and RAM; add it to CI if it fits
+
+## 9. CI and documentation
+
+- [x] 9.1 Add `.github/workflows/nuttx.yml`: S3 and C6 with every feature, C6 reduced, in the port's container, on changes to `core/`, `provisioning/`, `ports/posix/`, `ports/common/`, or `ports/nuttx/`
+- [x] 9.2 Rewrite `ports/nuttx/README.md` like the ESP-IDF port's: use in an application, options, interface mapping, set-up, the flash layout, status per board, not in the port yet
+- [x] 9.3 Add NuttX to the top-level README's port table and port comparison
+- [ ] 9.4 Update `REPORT.md` with the final sizes and a short summary; keep it as the record of what NuttX needed
+- [ ] 9.5 Fix the two format warnings in `core/src/tedge_core.c` in a separate pull request (`PRIu32`)
+- [ ] 9.6 Offer the two USB serial driver fixes to NuttX upstream
+- [ ] 9.7 Confirm that `git diff main -- core/ provisioning/ include/tedge/port/` is empty
+
+## 10. Release (thin-edge/microcontroller-devices, separate pull request)
+
+- [ ] 10.1 Build the NuttX agent for the ESP32-C6 in microcontroller-devices' release workflow, signed, with device type `thin-edge.io-nuttx`
+- [ ] 10.2 Add it to the release assets and `c8y-firmware.json`
+- [ ] 10.3 Flash a released image on the C6, set it up with `tedge-onboard`, and update it to the next release from Cumulocity

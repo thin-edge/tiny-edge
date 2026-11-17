@@ -496,6 +496,9 @@ int tedge_http_exchange(int conn, const struct tedge_http_request *req,
 		if (rc != 0) {
 			return rc;
 		}
+		if (req->timeout_is_idle) {
+			deadline = tedge_port_uptime_ms() + req->timeout_ms;
+		}
 	}
 	*status = p.status;
 	return 0;

@@ -1,0 +1,9 @@
+############################################################################
+# SPDX-License-Identifier: Apache-2.0
+#
+# tiny-edge as a nuttx-apps external application.
+############################################################################
+
+ifneq ($(CONFIG_TINY_EDGE),)
+CONFIGURED_APPS += $(APPDIR)/external/tiny_edge
+endif

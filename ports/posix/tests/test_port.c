@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 static int failures;
@@ -267,6 +268,24 @@ static void test_net(void)
 				 2000) == -ECONNREFUSED);
 }
 
+/* A thread that was never started has nothing to wait for: the join
+ * returns at once, as on the other ports, rather than waiting out the
+ * timeout (Linux, macOS) or for ever (NuttX, where a zeroed mutex is not a
+ * mutex). */
+static tedge_port_thread_t never_started;
+
+static void test_join_never_started(void)
+{
+	struct timespec a, b;
+	long ms;
+
+	clock_gettime(CLOCK_MONOTONIC, &a);
+	CHECK(tedge_port_thread_join(&never_started, 2000) == 0);
+	clock_gettime(CLOCK_MONOTONIC, &b);
+	ms = (b.tv_sec - a.tv_sec) * 1000 + (b.tv_nsec - a.tv_nsec) / 1000000;
+	CHECK(ms < 100);
+}
+
 int main(int argc, char **argv)
 {
 	char dir[] = "/tmp/tedge-port-test-XXXXXX";
@@ -284,6 +303,7 @@ int main(int argc, char **argv)
 
 	test_msgq();
 	test_events_and_threads();
+	test_join_never_started();
 	test_sem();
 	test_delayed_work();
 	test_atomics_and_heap();

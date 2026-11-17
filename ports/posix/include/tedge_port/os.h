@@ -11,7 +11,14 @@
  * Stacks are the one thing the port does not take from the core: the sizes
  * the core asks for are an MCU's, below what a POSIX C library needs, so
  * each thread gets the system's default stack. A stack "defined" here is a
- * placeholder of one byte, and the size passed with it is not used. */
+ * placeholder of one byte, and the size passed with it is not used.
+ *
+ * With TEDGE_POSIX_THREAD_STACKS, for a POSIX RTOS whose default thread
+ * stack is an MCU's too (NuttX), the placeholder records the size the core
+ * asks for, and each thread gets a stack of that size from the C library
+ * (pthread_attr_setstacksize()). The stack is not the placeholder's memory:
+ * a thread that has just ended may still be running its last instructions
+ * when its successor starts. */
 
 #ifndef TEDGE_PORT_POSIX_OS_H_
 #define TEDGE_PORT_POSIX_OS_H_
@@ -43,10 +50,20 @@ typedef struct {
 	void *arg;
 } tedge_port_thread_t;
 
+#if defined(TEDGE_POSIX_THREAD_STACKS)
+typedef struct {
+	size_t size;
+} tedge_port_stack_t;
+#define TEDGE_PORT_STACK_DEFINE(name, size)                                    \
+	static tedge_port_stack_t name[1] = {{(size)}}
+#define TEDGE_PORT_STACK_ARRAY_DEFINE(name, n, size)                           \
+	static tedge_port_stack_t name[n][1] = {[0 ...(n)-1] = {{(size)}}}
+#else
 typedef uint8_t tedge_port_stack_t;
 #define TEDGE_PORT_STACK_DEFINE(name, size) static tedge_port_stack_t name[1]
 #define TEDGE_PORT_STACK_ARRAY_DEFINE(name, n, size)                           \
 	static tedge_port_stack_t name[n][1]
+#endif
 #define TEDGE_PORT_STACK_SIZEOF(stack) sizeof(stack)
 
 typedef struct {
