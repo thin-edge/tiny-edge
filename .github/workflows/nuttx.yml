@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # The NuttX port: the agent built for an Xtensa and a RISC-V chip with every
-# feature, booting through MCUboot, and once with a reduced feature set, in
-# the port's own container (ports/nuttx/docker).
+# feature, booting through MCUboot, once with a reduced feature set, and once
+# with NuttX's CMake build instead of Make, in the port's own container
+# (ports/nuttx/docker).
 name: nuttx
 
 on:
@@ -29,7 +30,10 @@ jobs:
             args: --agent
           - board: esp32c6-devkitc
             features: small
-            args: --extra /ws/tiny-edge/ports/nuttx/configs/small.conf
+            args: --agent --extra /ws/tiny-edge/ports/nuttx/configs/small.conf
+          - board: esp32c6-devkitc
+            features: all-cmake
+            args: --agent --cmake
     steps:
       - uses: actions/checkout@v4
 

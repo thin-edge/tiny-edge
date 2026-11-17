@@ -223,6 +223,7 @@ every option took, and builds. It writes to
 | `--agent` | The agent as the first task, with set-up over USB (`configs/agent.conf`) |
 | `--version x.y.z` | The firmware version the agent reports and MCUboot's header carries |
 | `--extra <fragment>` | Your own configuration on top (`configs/small.conf`: a reduced feature set) |
+| `--cmake` | Build with NuttX's CMake build (`CMakeLists.txt`) instead of Make, in a worktree of the same NuttX release; the same files come out |
 | `--simple-boot` | No MCUboot: an image to flash at `0x0`, for development |
 
 Flash a new board:
@@ -236,9 +237,15 @@ nothing across the change: its data partition moves.
 
 ## Not in this port yet
 
-- Crash dumps: NuttX's core dump to flash is not wired to the client.
+- Crash dumps. NuttX 13.1 can write a core dump to a flash partition
+  (`CONFIG_BOARD_COREDUMP_MTDDEV`), but it opens that partition during
+  start-up, before any application runs, so the board code has to
+  register it, and the ESP32-C6 and ESP32-S3 boards register only the
+  MCUboot slots and the data partition. The 4 MB layout also has no room
+  left: a dump partition would come out of the data partition, which
+  erases the settings and the device key of every board updated to it.
+  Adding it takes a NuttX board change and a new layout.
 - Improv over BLE: set-up works over the USB serial console only.
-- NuttX's CMake build: the app builds with Make.
 - Boards other than the ESP32-C6 and ESP32-S3.
 
 ## Status
