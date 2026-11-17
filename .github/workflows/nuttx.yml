@@ -27,7 +27,7 @@ jobs:
             args: --agent
           - board: esp32s3-devkit
             features: all
-            args: --agent
+            args: --agent --extra /ws/tiny-edge/ports/nuttx/configs/esp32s3-psram-octal.conf
           - board: esp32c6-devkitc
             features: small
             args: --agent --extra /ws/tiny-edge/ports/nuttx/configs/small.conf

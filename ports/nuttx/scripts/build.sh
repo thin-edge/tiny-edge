@@ -202,8 +202,18 @@ fi
 # could not meet drops it without a word. The exception is an option of a
 # feature that a fragment turns off on purpose, such as the shell command's
 # allow-list (CONFIG_TEDGE_SHELL_COMMAND_ALLOW_LIST in configs/agent.conf)
-# when configs/small.conf turns CONFIG_TEDGE_SHELL_COMMAND off.
-disabled=$(cat "${fragments[@]}" |
+# when configs/small.conf turns CONFIG_TEDGE_SHELL_COMMAND off. Only the
+# last setting of each option counts, as for Kconfig: a later fragment
+# (--extra) may change what an earlier one set.
+settings() {
+	cat "${fragments[@]}" | awk '
+		/^CONFIG_[A-Za-z0-9_]*=/ { sym = $0; sub(/=.*/, "", sym) }
+		/^# CONFIG_[A-Za-z0-9_]* is not set$/ { sym = $2 }
+		sym != "" { last[sym] = $0; order[sym] = NR; sym = "" }
+		END { for (s in last) print order[s] "\t" last[s] }' |
+		sort -n | cut -f2-
+}
+disabled=$(settings |
 	sed -n 's/^# \(CONFIG_[A-Za-z0-9_]*\) is not set$/\1/p')
 turned_off() {
 	local sym=$1 off
@@ -223,7 +233,7 @@ while IFS= read -r line; do
 		! grep -q "^$sym=" "$cfg" ||
 		{ echo "not applied: $line" >&2; missing=1; } ;;
 	esac
-done < <(cat "${fragments[@]}")
+done < <(settings)
 [[ $missing == 0 ]] || exit 1
 
 # nuttx-apps does not rebuild an application's objects when the

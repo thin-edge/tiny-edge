@@ -226,6 +226,21 @@ every option took, and builds. It writes to
 | `--cmake` | Build with NuttX's CMake build (`CMakeLists.txt`) instead of Make, in a worktree of the same NuttX release; the same files come out |
 | `--simple-boot` | No MCUboot: an image to flash at `0x0`, for development |
 
+### Which image for which board
+
+| Board | Build | Notes |
+|---|---|---|
+| ESP32-C6-DevKitC | `build.sh esp32c6-devkitc --agent` | Every feature |
+| ESP32-S3 with octal PSRAM (`N8R8`, `N16R8`, ...) | `build.sh esp32s3-devkit --agent --extra /ws/tiny-edge/ports/nuttx/configs/esp32s3-psram-octal.conf` | Every feature. The image does not start on a board without PSRAM |
+| ESP32-S3 with quad PSRAM (`N8R2`, ...) | As above, with a copy of `configs/esp32s3-psram-octal.conf` that sets `CONFIG_ESP32S3_SPIRAM_MODE_QUAD=y` instead of `_MODE_OCT` | Not tested |
+| ESP32-S3 without PSRAM (`N8`, ...) | `build.sh esp32s3-devkit --agent --extra /ws/tiny-edge/ports/nuttx/configs/small.conf` | The reduced set: no firmware update, shell command, log upload, or remote access, which need a second TLS session the internal RAM has no room for |
+| ESP32-C3-DevKitM | `build.sh esp32c3-devkit --agent` | Builds; not run (see Status) |
+
+The module's name says which an ESP32-S3 board has: the letters after the
+flash size, as in `ESP32-S3-WROOM-1-N16R8` (16 MB flash, 8 MB octal PSRAM).
+`esptool chip-id` reports the PSRAM's size ("Embedded PSRAM 8MB"); 8 MB
+modules have octal PSRAM, 2 MB modules quad.
+
 Flash a new board:
 
 ```sh
@@ -250,10 +265,10 @@ nothing across the change: its data partition moves.
 
 ## Status
 
-Builds for the ESP32-C6 and the ESP32-S3 with every feature, for the
-ESP32-C6 with a reduced set, and for the ESP32-C6 with NuttX's CMake build
-(all four in CI). The agent with every feature is 1.41 MB on the ESP32-C6
-and 1.16 MB on the ESP32-S3, in a 1.5 MB slot.
+Builds for the ESP32-C6 and the ESP32-S3 (with octal PSRAM) with every
+feature, for the ESP32-C6 with a reduced set, and for the ESP32-C6 with
+NuttX's CMake build (all four in CI). The agent with every feature is
+1.41 MB on the ESP32-C6 and 1.16 MB on the ESP32-S3, in a 1.5 MB slot.
 
 Tested on an ESP32-C6 against a Cumulocity tenant, with no program reading
 the USB port: set-up with `tedge-onboard`, certificate enrollment and
@@ -264,8 +279,10 @@ from Cumulocity and its rollback, an operation interrupted by a reset, the
 reduced set, the CMake build, and a 30-minute run with telemetry and
 tunnels (steady heap, at most 63 % of any thread's stack).
 
-Not tested on a board yet: set-up from an erased data partition with the
-Wi-Fi scan, and anything on the ESP32-S3.
+Tested on an ESP32-S3-DevKitC-1 N16R8 with its PSRAM: set-up from an
+erased data partition, the connection and reports, log upload, parameters
+across a restart, and a firmware update from Cumulocity. Without the PSRAM
+fragment, log upload failed for lack of heap.
 
 The ESP32-C3 (`esp32c3-devkit`) builds but has not run. Every feature
 links (1.40 MB image; dram0 241,520 of 321,296 B), but that leaves about
