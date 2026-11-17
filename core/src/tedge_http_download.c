@@ -177,6 +177,9 @@ static int fetch_once(const char *url, struct download_state *st,
 			.buf = rx,
 			.buf_len = sizeof(rx),
 			.timeout_ms = (uint32_t)st->req->timeout_ms,
+			/* A firmware image takes minutes on a slow link: only
+			 * a server that stops sending is a timeout. */
+			.timeout_is_idle = true,
 		};
 
 		ret = tedge_http_exchange(conn, &req, &status);

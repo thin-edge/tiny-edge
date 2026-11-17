@@ -106,8 +106,12 @@ struct tedge_http_request {
 	/** Receive buffer; 512 bytes is plenty. */
 	uint8_t *buf;
 	size_t buf_len;
-	/** For the whole exchange, from the request's first byte. */
+	/** For the whole exchange, from the request's first byte... */
 	uint32_t timeout_ms;
+	/** ...or, when set, for each wait: the time restarts whenever data
+	 *  arrives, so a large download is not cut short while it is moving,
+	 *  and a server that stops sending still times out. */
+	bool timeout_is_idle;
 };
 
 /**
