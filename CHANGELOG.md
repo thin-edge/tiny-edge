@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/thin-edge/tiny-edge/compare/v0.7.0...v0.8.0) (2026-11-18)
+
+
+### Features
+
+* **onboard:** install tedge-onboard as a go-c8y-cli extension ([99b615e](https://github.com/thin-edge/tiny-edge/commit/99b615e6a5e543a2bde0963679ef888fbfbfbab5))
+* **onboard:** install tedge-onboard as a go-c8y-cli extension ([2dc255f](https://github.com/thin-edge/tiny-edge/commit/2dc255fdb356a503a516d92d18dee2e34c47d7c5))
+
 ## [0.7.0](https://github.com/thin-edge/tiny-edge/compare/v0.6.1...v0.7.0) (2026-11-18)
 
 
