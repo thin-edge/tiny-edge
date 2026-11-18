@@ -12,10 +12,12 @@ Rules:
    another header would otherwise let through. They are the code every port
    shares, so they may only use C, the client's own headers and the port
    interface.
-2. A port never reaches into another port (ports/<a> must not name ports/<b>).
-   ports/common/ is not a port: it is code for platforms with BSD sockets and
-   mbedTLS, which any port may build. It names no port, and is held to rule
-   1 as well, since several RTOSes share it.
+2. A port never reaches into another port (ports/<a> must not name ports/<b>),
+   unless it is declared to build on that port (BUILDS_ON): the NuttX port is
+   the POSIX port's sources with NuttX's own additions, by design, rather
+   than a copy of them. ports/common/ is not a port: it is code for platforms
+   with BSD sockets and mbedTLS, which any port may build. It names no port,
+   and is held to rule 1 as well, since several RTOSes share it.
 3. Nothing reaches outside the repository with "../" paths.
 
 Documentation (*.md) is not checked.
@@ -51,7 +53,7 @@ CODE_SUFFIXES = {
     ".c", ".h", ".cmake", ".conf", ".yml", ".yaml", ".overlay", ".dts",
     ".dtsi", ".sh", ".py", ".ld",
 }
-CODE_NAMES = {"CMakeLists.txt", "Kconfig"}
+CODE_NAMES = {"CMakeLists.txt", "Kconfig", "Makefile", "Make.defs"}
 SKIP_DIRS = {".git", "build", "openspec"}
 
 
@@ -62,6 +64,8 @@ def is_code(path: Path) -> bool:
 
 # Shared by the ports, not one of them.
 COMMON = "common"
+# Ports that build another port's sources as their own base.
+BUILDS_ON = {"nuttx": {"posix"}}
 
 
 def is_portable(rel: str) -> bool:
@@ -97,8 +101,9 @@ def check_file(path: Path) -> list[str]:
         own = rel.split("/")[1]
         for lineno, line in enumerate(text.splitlines(), start=1):
             for match in PORT_REF.finditer(line):
-                if match.group(1) != own and (match.group(1) != COMMON
-                                              or own == COMMON):
+                other = match.group(1)
+                if other != own and (other != COMMON or own == COMMON) \
+                        and other not in BUILDS_ON.get(own, ()):
                     problems.append(f"{rel}:{lineno}: port '{own}' refers to "
                                     f"port '{match.group(1)}'")
 
@@ -116,7 +121,7 @@ def main() -> int:
     for path in sorted(ROOT.rglob("*")):
         parts = path.relative_to(ROOT).parts
         if not path.is_file() or not is_code(path) or SKIP_DIRS & set(parts) \
-                or parts[0].startswith("build"):
+                or any(part.startswith("build") for part in parts[:-1]):
             continue
         problems.extend(check_file(path))
 

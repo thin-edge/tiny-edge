@@ -15,6 +15,7 @@
 #include "tedge_posix_internal.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <sched.h>
 #include <stdlib.h>
 #include <string.h>
@@ -96,6 +97,25 @@ void tedge_port_spin_unlock(tedge_port_spinlock_t *lock,
 
 /* --- Threads ------------------------------------------------------------- */
 
+/* The stack the core asked for, with TEDGE_POSIX_THREAD_STACKS (see
+ * <tedge_port/os.h>); the system's default otherwise. */
+static void stack_attr(pthread_attr_t *attr, const tedge_port_stack_t *stack)
+{
+#if defined(TEDGE_POSIX_THREAD_STACKS)
+	if (stack != NULL && stack->size > 0) {
+		size_t size = stack->size;
+
+		if (size < PTHREAD_STACK_MIN) {
+			size = PTHREAD_STACK_MIN;
+		}
+		(void)pthread_attr_setstacksize(attr, size);
+	}
+#else
+	(void)attr;
+	(void)stack;
+#endif
+}
+
 static void *thread_entry(void *p)
 {
 	tedge_port_thread_t *thread = p;
@@ -113,9 +133,9 @@ int tedge_port_thread_start(tedge_port_thread_t *thread,
 			    void (*entry)(void *arg), void *arg,
 			    const char *name)
 {
+	pthread_attr_t attr;
 	int ret;
 
-	(void)stack;
 	(void)stack_size;
 	/* Once only: a thread that has just signalled its end may still be
 	 * unlocking when its successor starts. */
@@ -131,7 +151,10 @@ int tedge_port_thread_start(tedge_port_thread_t *thread,
 	(void)pthread_mutex_unlock(&thread->lock);
 	/* Detached: tedge_port_thread_join() waits on the flag instead, which
 	 * has a timeout everywhere (pthread_timedjoin_np() is glibc's). */
-	ret = pthread_create(&thread->id, NULL, thread_entry, thread);
+	(void)pthread_attr_init(&attr);
+	stack_attr(&attr, stack);
+	ret = pthread_create(&thread->id, &attr, thread_entry, thread);
+	(void)pthread_attr_destroy(&attr);
 	if (ret != 0) {
 		return -ret;
 	}
@@ -157,6 +180,12 @@ int tedge_port_thread_join(tedge_port_thread_t *thread, uint32_t timeout_ms)
 	int64_t deadline = monotonic_ms() + timeout_ms;
 	bool done;
 
+	/* Never started: nothing to wait for, as on the other ports. Its lock
+	 * is not initialised either, and a zeroed pthread_mutex_t is only a
+	 * valid mutex on some systems: on NuttX, locking it waits for ever. */
+	if (!thread->ready) {
+		return 0;
+	}
 	(void)pthread_mutex_lock(&thread->lock);
 	while (!thread->done && cond_wait_until(&thread->done_cond,
 						&thread->lock, deadline)) {
@@ -344,13 +373,21 @@ static void *work_thread(void *arg)
 	return NULL;
 }
 
+/* The delayed work runs the core's callbacks, so it gets the stack of the
+ * core's own thread. */
+TEDGE_PORT_STACK_DEFINE(work_stack, TEDGE_THREAD_STACK_SIZE);
+
 static void work_start(void)
 {
+	pthread_attr_t attr;
 	pthread_t id;
 
-	if (pthread_create(&id, NULL, work_thread, NULL) == 0) {
+	(void)pthread_attr_init(&attr);
+	stack_attr(&attr, work_stack);
+	if (pthread_create(&id, &attr, work_thread, NULL) == 0) {
 		(void)pthread_detach(id);
 	}
+	(void)pthread_attr_destroy(&attr);
 }
 
 void tedge_port_delayed_work_schedule(tedge_port_delayed_work_t *work,

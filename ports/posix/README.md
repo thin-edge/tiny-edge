@@ -61,13 +61,25 @@ lists every option with its description.
 | `TEDGE_REMOTE_ACCESS` | `ON` | With `TEDGE_REMOTE_ACCESS_TARGETS`: `lan`, `list`, or `local` |
 | `TEDGE_LOG_LEVEL` | `3` | 1 error, 2 warning, 3 info, 4 debug |
 | `TEDGE_HEAP_SIZE` | `16384` | The most the client allocates, as on a microcontroller |
+| `TEDGE_SHELL_COMMAND` | `OFF` | Runs a `c8y_Command` through `popen()` (`/bin/sh`), when `TEDGE_SHELL_COMMAND_ALLOW_LIST` names it. An empty list refuses everything |
+| `TEDGE_SNTP` | `OFF` | Sets the clock with SNTP (`TEDGE_SNTP_SERVER`) when it is not valid. Off where the system keeps the clock |
 
 The configuration ends up in `<build>/generated/tedge_config.h`.
 
-Firmware update, the shell command, and crash dumps are not in this port
-yet. Each needs a POSIX design of its own: an image format and a launcher
-that can roll back, a command runner, and the system's core dumps. Turning
-one on stops the build with a message.
+Firmware update and crash dumps are not in this port yet. Each needs a
+POSIX design of its own: an image format and a launcher that can roll back,
+and the system's core dumps. Turning one on stops the build with a message.
+
+### Options for POSIX RTOSes
+
+A POSIX system that is an RTOS differs from Linux and macOS in a few ways.
+These options, off by default, are what the NuttX port sets:
+
+| Option | |
+|---|---|
+| `TEDGE_POSIX_THREAD_STACKS` | Each thread gets the stack size the core asks for, not the system's default |
+| `TEDGE_POSIX_MAC_IOCTL` | The MAC address comes from `SIOCGIFHWADDR`, for a `getifaddrs()` that lists no link-layer entries |
+| `TEDGE_POSIX_NO_EXEC` | No `exec()`: a restart is only the application's `restart` |
 
 ## Running the sample
 
@@ -129,6 +141,7 @@ int main(int argc, char **argv)
 | `interface` | The interface the client uses. NULL: the first that is up and has an IPv4 address |
 | `firmware_name`, `firmware_version` | What Cumulocity shows. NULL: the program's name and `0.0.0` |
 | `argv` | `main()`'s `argv`. A restart starts the program again with it. NULL: a restart exits with status 75 (`TEDGE_POSIX_EXIT_RESTART`) for systemd or launchd to restart |
+| `restart` | A function that restarts the device, used instead of `argv` when set: on an RTOS, a board reset |
 
 ## How the port maps the interface
 

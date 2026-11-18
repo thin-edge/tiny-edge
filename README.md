@@ -13,6 +13,7 @@ so the client looks like a native library to the people who use that RTOS.
 |---|---|---|
 | [Zephyr](ports/zephyr/README.md) | Verified on ESP32-C6, ESP32-S3, and ESP32 | A Zephyr module: a west project, Kconfig, profiles |
 | [FreeRTOS](ports/freertos/README.md): ESP-IDF first | Builds for ESP32-C6, ESP32-S3, and ESP32; tested on an ESP32-C6 | An ESP-IDF component with Kconfig; the FreeRTOS kernel layer is ready for other FreeRTOS platforms |
+| [NuttX](ports/nuttx/README.md) | Builds for ESP32-C6 and ESP32-S3; tested on an ESP32-C6 | A nuttx-apps application with Kconfig, built on the POSIX port |
 | Eclipse ThreadX | Planned | CMake library with a user configuration header |
 | [POSIX](ports/posix/README.md): Linux and macOS hosts; QNX and VxWorks RTP later | Run against Cumulocity on macOS; builds and passes its tests on Linux and macOS | A CMake library with CMake options |
 
@@ -36,8 +37,10 @@ tiny-edge/
 │   ├── freertos/        FreeRTOS kernel layer, and esp-idf/: the ESP-IDF
 │   │                    component (tiny_edge) and its sample
 │   ├── posix/           CMake library, options, sample, and tests
+│   ├── nuttx/           nuttx-apps application on the POSIX port's sources:
+│   │                    MCUboot, Wi-Fi, set-up over USB, the agent, build
 │   └── common/          not a port: BSD sockets with mbedTLS, and the device
-│                        key, shared by the POSIX and ESP-IDF ports
+│                        key, shared by the POSIX, ESP-IDF, and NuttX ports
 ├── provisioning/        optional library: set a device up over Improv Wi-Fi
 │                        (include/tedge/provisioning.h)
 ├── tools/onboard/       tedge-onboard: set a device up from a computer
@@ -61,15 +64,15 @@ configuration header, so the core builds the same way everywhere.
 **`ports/<rtos>/`** holds what does depend on the RTOS. A port is small and
 follows the RTOS's own conventions for:
 
-| Concern | Zephyr port | FreeRTOS port (ESP-IDF) | POSIX port | Other ports |
-|---|---|---|---|---|
-| Packaging | Zephyr module, west project | ESP-IDF component | CMake library | The RTOS's component or library format |
-| Configuration | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | CMake options `TEDGE_*` | `tedge_user_config.h`, in the style of `FreeRTOSConfig.h` and `tx_user.h` |
-| Threads and locks | `k_thread`, `k_mutex`, work queues | Static FreeRTOS tasks, semaphores, event groups, software timers | pthreads | The RTOS's task and mutex API |
-| Network and TLS | Zephyr sockets with TLS credentials | lwIP's BSD sockets with mbedTLS (shared with POSIX) | BSD sockets with mbedTLS | The RTOS's sockets with its usual TLS stack (mbedTLS, NetX Secure, OpenSSL) |
-| Persistent settings | Settings subsystem | NVS | A file per key | The RTOS's key-value store, or a file |
-| Firmware update | MCUboot | OTA partitions with the bootloader's rollback | Not yet | MCUboot, or the platform's own OTA mechanism |
-| Logging and shell | Zephyr logging and shell | `ESP_LOG`, and `esp_console` commands for the cloud shell | Standard error | The RTOS's logging |
+| Concern | Zephyr port | FreeRTOS port (ESP-IDF) | NuttX port | POSIX port | Other ports |
+|---|---|---|---|---|---|
+| Packaging | Zephyr module, west project | ESP-IDF component | nuttx-apps application | CMake library | The RTOS's component or library format |
+| Configuration | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | Kconfig `CONFIG_TEDGE_*`, mapped to `TEDGE_*` | CMake options `TEDGE_*` | `tedge_user_config.h`, in the style of `FreeRTOSConfig.h` and `tx_user.h` |
+| Threads and locks | `k_thread`, `k_mutex`, work queues | Static FreeRTOS tasks, semaphores, event groups, software timers | pthreads (the POSIX port's) | pthreads | The RTOS's task and mutex API |
+| Network and TLS | Zephyr sockets with TLS credentials | lwIP's BSD sockets with mbedTLS (shared with POSIX) | BSD sockets with mbedTLS (shared with POSIX) | BSD sockets with mbedTLS | The RTOS's sockets with its usual TLS stack (mbedTLS, NetX Secure, OpenSSL) |
+| Persistent settings | Settings subsystem | NVS | A file per key, on LittleFS | A file per key | The RTOS's key-value store, or a file |
+| Firmware update | MCUboot | OTA partitions with the bootloader's rollback | MCUboot | Not yet | MCUboot, or the platform's own OTA mechanism |
+| Logging and shell | Zephyr logging and shell | `ESP_LOG`, and `esp_console` commands for the cloud shell | Standard error, and NSH commands for the cloud shell | Standard error, and `/bin/sh` commands for the cloud shell (off by default) | The RTOS's logging |
 
 The port interface sits at the transport level: a port provides a TLS byte
 stream, and the core speaks MQTT, HTTP, and WebSocket over it. One protocol

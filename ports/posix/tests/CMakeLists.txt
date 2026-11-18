@@ -26,3 +26,15 @@ if(TEDGE_PROVISIONING)
   target_link_libraries(tedge-provisioning-test PRIVATE tedge::tedge)
   add_test(NAME provisioning COMMAND tedge-provisioning-test)
 endif()
+
+# The shell command needs the core's internal header, as the port does.
+if(TEDGE_SHELL_COMMAND)
+  add_executable(tedge-shell-test test_shell.c)
+  set_target_properties(tedge-shell-test PROPERTIES C_STANDARD 11)
+  target_compile_definitions(tedge-shell-test PRIVATE
+    _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE _DARWIN_C_SOURCE)
+  target_include_directories(tedge-shell-test PRIVATE
+    $<TARGET_PROPERTY:tedge,INCLUDE_DIRECTORIES>)
+  target_link_libraries(tedge-shell-test PRIVATE tedge::tedge)
+  add_test(NAME shell COMMAND tedge-shell-test)
+endif()
