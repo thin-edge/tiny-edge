@@ -63,3 +63,27 @@ jobs:
         run: |
           tools/onboard/build.sh "${TAG#v}" ${{ matrix.targets }}
           gh release upload "$TAG" tools/onboard/dist/* --clobber
+
+  # One checksums file for all of tedge-onboard's archives, which
+  # "c8y extensions install" uses to verify the download. It runs after
+  # every build has attached its archives.
+  onboard-checksums:
+    name: tedge-onboard checksums
+    needs: [release-please, onboard-tool]
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Attach checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: |
+          mkdir dist && cd dist
+          gh release download "$TAG" --pattern 'tedge-onboard_*.tar.gz' --pattern 'tedge-onboard_*.zip'
+          checksums="tedge-onboard_${TAG#v}_checksums.txt"
+          sha256sum tedge-onboard_* > "$checksums"
+          cat "$checksums"
+          gh release upload "$TAG" "$checksums" --clobber
