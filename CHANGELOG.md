@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.0](https://github.com/thin-edge/tiny-edge/compare/v0.6.1...v0.7.0) (2026-11-18)
+
+
+### Features
+
+* **nuttx:** add a NuttX port, built on the POSIX port ([edda440](https://github.com/thin-edge/tiny-edge/commit/edda440b7d9b3ba666c3f3a700ebccbd22ccf7c9))
+* **nuttx:** add a NuttX port, built on the POSIX port ([47ca371](https://github.com/thin-edge/tiny-edge/commit/47ca371e2827ba12f0170e2b8e1e4571d286a5d2))
+
+
+### Bug Fixes
+
+* **nuttx:** fill in Kconfig defaults before CMake reads the configuration ([d4a49e5](https://github.com/thin-edge/tiny-edge/commit/d4a49e5934532c69a746c8b5a737d96ef9620424))
+* **posix:** build TEDGE_POSIX_MAC_IOCTL only where SIOCGIFHWADDR exists ([024fb42](https://github.com/thin-edge/tiny-edge/commit/024fb4243436f8aae7de900963373ee1c892e7a5))
+
 ## [0.6.1](https://github.com/thin-edge/tiny-edge/compare/v0.6.0...v0.6.1) (2026-11-17)
 
 
