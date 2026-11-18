@@ -66,7 +66,7 @@
 - [x] 9.3 Add NuttX to the top-level README's port table and port comparison
 - [x] 9.4 Update `REPORT.md` with the final sizes and a short summary; keep it as the record of what NuttX needed (2026-11-17: summary, status per stage, findings 24–31, sizes for the S3, C6 and C3 agents, line counts)
 - [x] 9.5 Fix the two format warnings in `core/src/tedge_core.c` in a separate pull request (`PRIu32`) (2026-11-17: thin-edge/tiny-edge#20; checked with `riscv-none-elf-gcc -Werror`. The download idle timeout from 5.6 went out separately too, as #21 with unit tests)
-- [ ] 9.6 Offer the two USB serial driver fixes to NuttX upstream (deferred 2026-11-17 by the maintainer)
+- [ ] 9.6 Offer the two USB serial driver fixes to NuttX upstream (deferred 2026-11-17 by the maintainer; tracked in thin-edge/tiny-edge#30)
 - [x] 9.7 Confirm that `git diff main -- core/ provisioning/ include/tedge/port/` is empty (2026-11-17: empty after rebasing on 0.6.1, which has #20 and #21)
 
 ## 10. Release (thin-edge/microcontroller-devices, separate pull request)
