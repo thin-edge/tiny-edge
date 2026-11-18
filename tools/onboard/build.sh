@@ -25,11 +25,12 @@ for target in "$@"; do
 	CGO_ENABLED=$cgo GOOS=$goos GOARCH=$goarch \
 		go build -trimpath -ldflags "-s -w -X main.version=$version" \
 		-o "$out/$name" .
-	cp README.md "$out/"
+	cp README.md extension.yaml "$out/"
 	if [ "$goos" = windows ]; then
 		(cd dist && zip -qr "$(basename "$out").zip" "$(basename "$out")")
 	else
-		tar -C dist -czf "$out.tar.gz" "$(basename "$out")"
+		# No macOS AppleDouble (._*) files: go-c8y-cli expects one top-level folder
+		COPYFILE_DISABLE=1 tar -C dist -czf "$out.tar.gz" "$(basename "$out")"
 	fi
 	rm -rf "$out"
 	echo "built $out"

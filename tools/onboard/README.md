@@ -20,6 +20,20 @@ You need:
 - **This computer on the Wi-Fi network** the device should use. Most
   devices only use 2.4 GHz networks.
 
+## Install with go-c8y-cli
+
+The tool is also a go-c8y-cli extension. Install it with:
+
+```sh
+c8y extensions install thin-edge/tiny-edge
+```
+
+Then start it with `c8y tinyedge onboard` instead of `./tedge-onboard`. It
+takes the same options, and it uses your active go-c8y-cli session. Run
+`c8y extensions upgrade tinyedge` to get a newer version.
+
+The rest of this section, apart from the download itself, still applies.
+
 ## Download
 
 Download the file for your computer from the

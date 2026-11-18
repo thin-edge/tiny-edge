@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# go-c8y-cli extension manifest. build.sh puts it in each release archive,
+# so the tool installs with:
+#
+#   c8y extensions install thin-edge/tiny-edge
+#
+# and runs as "c8y tinyedge onboard". Add other tiny-edge host commands
+# under "commands".
+version: v1
+name: tinyedge
+binary:
+  path: tedge-onboard
+commands:
+  - name: onboard
+    description: Set up a device for Cumulocity over a USB cable
+    # tedge-onboard has no subcommands, so pass only the user's arguments
+    exec: []
