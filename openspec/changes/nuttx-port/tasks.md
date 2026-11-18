@@ -73,6 +73,6 @@
 
 Started once this change and its two `core/` pull requests have merged (decided 2026-11-17).
 
-- [ ] 10.1 Build the NuttX agent for the ESP32-C6 in microcontroller-devices' release workflow, signed, with device type `thin-edge.io-nuttx`
-- [ ] 10.2 Add it to the release assets and `c8y-firmware.json`
+- [x] 10.1 Build the NuttX agent for the ESP32-C6 in microcontroller-devices' release workflow, with device type `thin-edge.io-nuttx` (thin-edge/microcontroller-devices#30). Not signed: MCUboot checks each image's SHA-256 hash only, as the release notes say
+- [x] 10.2 Add it to the release assets and `c8y-firmware.json` (`tedge-agent-nuttx-esp32c6-devkitc`, first in microcontroller-devices 0.15.0)
 - [ ] 10.3 Flash a released image on the C6, set it up with `tedge-onboard`, and update it to the next release from Cumulocity
