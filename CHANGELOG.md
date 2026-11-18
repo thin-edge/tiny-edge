@@ -5,7 +5,6 @@
 
 ### Features
 
-* **nuttx:** add a NuttX port, built on the POSIX port ([edda440](https://github.com/thin-edge/tiny-edge/commit/edda440b7d9b3ba666c3f3a700ebccbd22ccf7c9))
 * **nuttx:** add a NuttX port, built on the POSIX port ([47ca371](https://github.com/thin-edge/tiny-edge/commit/47ca371e2827ba12f0170e2b8e1e4571d286a5d2))
 
 
