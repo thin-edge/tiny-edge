@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.1](https://github.com/thin-edge/tiny-edge/compare/v0.8.0...v0.8.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **c8y:** ask for a new token again when a request goes unanswered ([f6d0a4e](https://github.com/thin-edge/tiny-edge/commit/f6d0a4e2460f20dff6c4d258a5bd19022f058e1b))
+* **c8y:** ask for a new token again when a request goes unanswered ([fa7b7bd](https://github.com/thin-edge/tiny-edge/commit/fa7b7bdbe9023945dc1c89f192561968082472cb))
+* **firmware:** don't judge a pending update on a reconnect before reset ([34907f0](https://github.com/thin-edge/tiny-edge/commit/34907f0caf8b2da9828742a61dffe6c61caaa8cf))
+* **firmware:** don't judge a pending update on a reconnect before reset ([9537fd2](https://github.com/thin-edge/tiny-edge/commit/9537fd2359af6b3b8a04f0e0054f320b4923b08f))
+* **nuttx:** don't refer to the Zephyr port from the TLS config ([29cecc5](https://github.com/thin-edge/tiny-edge/commit/29cecc5c6e0808547856b1d2cdc5f963910ba79e))
+* **nuttx:** stop TLS running the heap out during firmware downloads ([52baddc](https://github.com/thin-edge/tiny-edge/commit/52baddca209ec04d8408691a364eac8f6896f412))
+* **nuttx:** stop TLS running the heap out during firmware downloads ([5dad513](https://github.com/thin-edge/tiny-edge/commit/5dad51325eadee931365596cba0dc3a90c765035)), closes [#32](https://github.com/thin-edge/tiny-edge/issues/32)
+
 ## [0.8.0](https://github.com/thin-edge/tiny-edge/compare/v0.7.0...v0.8.0) (2026-11-18)
 
 
