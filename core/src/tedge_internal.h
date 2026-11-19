@@ -151,6 +151,18 @@ int tedge_c8y_publish_sr(const char *line);
 /** The latest JWT from s/dat, or an empty string. */
 const char *tedge_c8y_jwt(void);
 
+/**
+ * Whether to ask for a new token now (tedge_jwt.c). Times are uptimes in
+ * milliseconds, and 0 means never: @p got_at_ms is when the last token
+ * arrived, @p asked_at_ms when one was last requested. A token is refreshed
+ * @p refresh_ms after it arrived; a request that gets no answer is repeated
+ * after @p retry_ms, so one lost reply does not leave the device with an
+ * expired token until it reconnects.
+ */
+bool tedge_jwt_request_due(int64_t now_ms, int64_t got_at_ms,
+			   int64_t asked_at_ms, int64_t refresh_ms,
+			   int64_t retry_ms);
+
 /* --- Downloads (tedge_http_download.c) ----------------------------------- */
 
 /** Receives each body segment as the parser reports it. */

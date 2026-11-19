@@ -175,6 +175,59 @@ ZTEST(tedge_backoff, test_jitter_spreads_attempts)
 
 ZTEST_SUITE(tedge_backoff, NULL, NULL, NULL, NULL, NULL);
 
+/* --- tedge_jwt.c --------------------------------------------------------- */
+
+#define REFRESH (50 * 60 * 1000)
+#define RETRY   (60 * 1000)
+
+ZTEST(tedge_jwt, test_first_request)
+{
+	/* No token and never asked. */
+	zassert_true(tedge_jwt_request_due(5000, 0, 0, REFRESH, RETRY));
+}
+
+ZTEST(tedge_jwt, test_waits_for_the_answer)
+{
+	/* Asked at 10 s: not again within the retry interval. */
+	zassert_false(tedge_jwt_request_due(10000 + RETRY - 1, 0, 10000,
+					    REFRESH, RETRY));
+}
+
+ZTEST(tedge_jwt, test_unanswered_request_is_repeated)
+{
+	/* The first answer was lost: ask again once the retry interval is up,
+	 * instead of waiting for the next session. */
+	zassert_true(tedge_jwt_request_due(10000 + RETRY, 0, 10000,
+					   REFRESH, RETRY));
+}
+
+ZTEST(tedge_jwt, test_fresh_token_is_kept)
+{
+	zassert_false(tedge_jwt_request_due(20000 + REFRESH - 1, 20000, 10000,
+					    REFRESH, RETRY));
+}
+
+ZTEST(tedge_jwt, test_refresh_after_the_interval)
+{
+	zassert_true(tedge_jwt_request_due(20000 + REFRESH, 20000, 10000,
+					   REFRESH, RETRY));
+}
+
+ZTEST(tedge_jwt, test_lost_refresh_is_repeated)
+{
+	/* The refresh was asked for at 50 min and never answered: the old
+	 * token is about to expire, so ask again a minute later, and not
+	 * before. */
+	int64_t got = 20000, asked = got + REFRESH;
+
+	zassert_false(tedge_jwt_request_due(asked + RETRY - 1, got, asked,
+					    REFRESH, RETRY));
+	zassert_true(tedge_jwt_request_due(asked + RETRY, got, asked,
+					   REFRESH, RETRY));
+}
+
+ZTEST_SUITE(tedge_jwt, NULL, NULL, NULL, NULL, NULL);
+
 /* ------------------------------------------------------------------------ */
 /* Remote access                                                             */
 /* ------------------------------------------------------------------------ */
