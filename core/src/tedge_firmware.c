@@ -412,6 +412,14 @@ void tedge_fw_on_connected(void)
 	bool confirmed = tedge_port_fw_is_confirmed();
 	char *sep;
 
+	/* A reconnect while this boot's own update is still running (the
+	 * download, or the moments between writing the marker and the reset)
+	 * must leave the marker alone: it is for the next boot to judge. Read
+	 * now, it would look like a rollback, since the old image is still
+	 * running, and the new image would then have nothing to report. */
+	if (job_running) {
+		return;
+	}
 	if (marker[0] == '\0') {
 		marker_load();
 	}
