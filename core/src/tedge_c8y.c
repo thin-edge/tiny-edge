@@ -40,7 +40,10 @@ TEDGE_LOG_DECLARE();
 #define CONNACK_TIMEOUT_MS 15000
 #define SUBACK_TIMEOUT_MS  3000
 #define SUBACK_RETRY_MAX   5
+/* Cumulocity's tokens last an hour by default: refresh well before that,
+ * and ask again when a request gets no answer. */
 #define JWT_REFRESH_MS     (50 * 60 * 1000)
+#define JWT_RETRY_MS       (60 * 1000)
 /* Three broker closes this soon after CONNACK look like another client using
  * the same ID (c8y-direct-spikes, Spike B finding 6). */
 #define TAKEOVER_WINDOW_MS 10000
@@ -73,7 +76,8 @@ static uint8_t packet_buf[TEDGE_C8Y_PAYLOAD_BYTES + PACKET_OVERHEAD];
 static bool session_open;
 static bool ca_registered;
 static char jwt[1024];
-static int64_t jwt_at;
+static int64_t jwt_at;       /* when the token arrived; 0: none yet */
+static int64_t jwt_asked_at; /* when one was last requested; 0: never */
 static char device_id[64];
 
 static int64_t connected_at;
@@ -705,6 +709,14 @@ static void dispatch_operation(const char *line)
 	TEDGE_LOG_DBG("unhandled downstream message: %.40s", line);
 }
 
+/* Ask for a new token on s/uat; it arrives on s/dat. */
+static void request_jwt(void)
+{
+	/* Never 0, which means "never asked". */
+	jwt_asked_at = tedge_port_uptime_ms() | 1;
+	(void)publish("s/uat", "", QOS_0);
+}
+
 static void handle_message(const char *topic, const char *payload, size_t len)
 {
 	if (strcmp(topic, "s/dat") == 0) {
@@ -712,7 +724,7 @@ static void handle_message(const char *topic, const char *payload, size_t len)
 		if (len > 3 && len - 3 < sizeof(jwt)) {
 			memcpy(jwt, payload + 3, len - 3);
 			jwt[len - 3] = '\0';
-			jwt_at = tedge_port_uptime_ms();
+			jwt_at = tedge_port_uptime_ms() | 1;
 			TEDGE_LOG_DBG("token received (%zu B)", len - 3);
 		}
 		return;
@@ -1135,8 +1147,9 @@ static int session_start(void)
 		}
 	}
 	if (tedge_auth_username() == NULL) {
-		/* Only certificate devices get a token. */
-		(void)publish("s/uat", "", QOS_0);
+		/* Only certificate devices get a token. A new session always
+		 * asks for one. */
+		request_jwt();
 	}
 
 	/* c8y_Firmware, in every build: the running image's name and version.
@@ -1399,10 +1412,10 @@ static int c8y_poll(int timeout_ms)
 	/* Renew the certificate while there is still plenty of time. */
 	tedge_cert_renew_tick();
 #endif
-	if (tedge_auth_username() == NULL && jwt_at != 0 &&
-	    tedge_port_uptime_ms() - jwt_at > JWT_REFRESH_MS) {
-		jwt_at = tedge_port_uptime_ms(); /* one request per interval */
-		(void)publish("s/uat", "", QOS_0);
+	if (tedge_auth_username() == NULL &&
+	    tedge_jwt_request_due(tedge_port_uptime_ms(), jwt_at, jwt_asked_at,
+				  JWT_REFRESH_MS, JWT_RETRY_MS)) {
+		request_jwt();
 	}
 	return 0;
 }

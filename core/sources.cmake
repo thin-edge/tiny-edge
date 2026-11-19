@@ -30,6 +30,7 @@ function(tedge_core_sources out prefix)
   _on(TEDGE_TRANSPORT_C8Y
     tedge_c8y.c
     tedge_codec.c
+    tedge_jwt.c
     tedge_mqtt.c
     tedge_smartrest.c
   )

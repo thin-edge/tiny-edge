@@ -19,6 +19,7 @@ target_sources(app PRIVATE
   ../../../../core/src/tedge_ra_target.c
   ../../../../core/src/tedge_url.c
   ../../../../core/src/tedge_cert_decision.c
+  ../../../../core/src/tedge_jwt.c
   ../../../../core/src/tedge_telemetry.c
   ../../../../core/src/tedge_json.c
   ../../../../core/src/tedge_shell_allow_list.c
