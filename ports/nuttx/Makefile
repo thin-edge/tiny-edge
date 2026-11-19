@@ -106,9 +106,11 @@ CFLAGS += ${DEFINE_PREFIX}TEDGE_POSIX_MAC_IOCTL
 # only with CONFIG_LIBC_EXECFUNCS.
 CFLAGS += ${DEFINE_PREFIX}TEDGE_POSIX_NO_EXEC
 # mbedTLS's Unix code paths (time, entropy from /dev/urandom, pthreads),
-# as nuttx-apps builds mbedTLS 3; threading is added by the user config.
+# as nuttx-apps builds mbedTLS 3; the two user configs (include/) add
+# threading and the memory settings.
 CFLAGS += ${DEFINE_PREFIX}unix
 CFLAGS += ${DEFINE_PREFIX}TF_PSA_CRYPTO_USER_CONFIG_FILE=\"tedge_mbedtls_user_config.h\"
+CFLAGS += ${DEFINE_PREFIX}MBEDTLS_USER_CONFIG_FILE=\"tedge_mbedtls_tls_config.h\"
 CFLAGS += -std=gnu11
 
 include $(APPDIR)/Application.mk
