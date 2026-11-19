@@ -59,6 +59,9 @@ struct conn {
 	bool used;
 	bool tls;
 	int fd;
+	/* The socket's errno behind the last failed TLS read or write, so a
+	 * failure can say what went wrong underneath. */
+	int bio_errno;
 	mbedtls_ssl_context ssl;
 	mbedtls_ssl_config conf;
 	mbedtls_x509_crt ca;
@@ -68,6 +71,16 @@ struct conn {
 
 static struct conn conns[MAX_CONNS];
 TEDGE_PORT_MUTEX_DEFINE(conns_lock);
+
+/* A TLS read or write failed for good: say how, since the caller only sees
+ * -ECONNRESET. A reset from the peer shows as errno 104 underneath; an
+ * mbedTLS code without an errno is TLS's own (out of memory is -0x7f00). */
+static void tls_failed(int handle, struct conn *c, const char *what, int ret)
+{
+	TEDGE_LOG_WRN("TLS: connection %d: %s failed (-0x%04x, errno %d)",
+		      handle, what, (unsigned int)-ret, c->bio_errno);
+	c->bio_errno = 0;
+}
 
 static int64_t now_ms(void)
 {
@@ -92,6 +105,7 @@ static int conn_alloc(int fd, bool tls)
 			conns[i].used = true;
 			conns[i].tls = tls;
 			conns[i].fd = fd;
+			conns[i].bio_errno = 0;
 			if (tls) {
 				/* Before anything can fail, so conn_free()
 				 * always frees initialised state. */
@@ -294,6 +308,7 @@ static int bio_send(void *ctx, const unsigned char *buf, size_t len)
 	if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
 		return MBEDTLS_ERR_SSL_WANT_WRITE;
 	}
+	c->bio_errno = errno;
 	return (errno == EPIPE || errno == ECONNRESET) ? MBEDTLS_ERR_NET_CONN_RESET
 						       : MBEDTLS_ERR_NET_SEND_FAILED;
 }
@@ -309,6 +324,7 @@ static int bio_recv(void *ctx, unsigned char *buf, size_t len)
 	if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
 		return MBEDTLS_ERR_SSL_WANT_READ;
 	}
+	c->bio_errno = errno;
 	return (errno == ECONNRESET) ? MBEDTLS_ERR_NET_CONN_RESET
 				     : MBEDTLS_ERR_NET_RECV_FAILED;
 }
@@ -538,6 +554,7 @@ int tedge_port_send(int conn, const void *buf, size_t len)
 			if (ret == MBEDTLS_ERR_SSL_WANT_READ) {
 				want = POLLIN;
 			} else if (ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+				tls_failed(conn, c, "write", ret);
 				return -ECONNRESET;
 			}
 		} else {
@@ -572,15 +589,20 @@ int tedge_port_recv(int conn, void *buf, size_t len, uint32_t timeout_ms)
 
 		if (c->tls) {
 			ret = mbedtls_ssl_read(&c->ssl, buf, len);
-			if (ret >= 0) {
-				return ret; /* 0: the peer closed */
+			if (ret > 0) {
+				return ret;
 			}
-			if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+			if (ret == 0 || ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+				TEDGE_LOG_DBG("TLS: connection %d: the peer closed "
+					      "it%s", conn,
+					      ret == 0 ? " without close_notify"
+						       : "");
 				return 0;
 			}
 			if (ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
 				want = POLLOUT;
 			} else if (ret != MBEDTLS_ERR_SSL_WANT_READ) {
+				tls_failed(conn, c, "read", ret);
 				return -ECONNRESET;
 			}
 		} else {

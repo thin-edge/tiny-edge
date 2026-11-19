@@ -126,9 +126,11 @@ if(CONFIG_TINY_EDGE)
     TEDGE_POSIX_THREAD_STACKS
     TEDGE_POSIX_MAC_IOCTL
     TEDGE_POSIX_NO_EXEC
-    # mbedTLS's Unix code paths; threading comes from the user config.
+    # mbedTLS's Unix code paths; threading and the memory settings come
+    # from the user configs.
     unix
     TF_PSA_CRYPTO_USER_CONFIG_FILE="tedge_mbedtls_user_config.h"
+    MBEDTLS_USER_CONFIG_FILE="tedge_mbedtls_tls_config.h"
     COMPILE_FLAGS
     -std=gnu11)
 endif()
