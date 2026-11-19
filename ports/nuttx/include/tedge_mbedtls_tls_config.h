@@ -1,8 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0
  *
- * mbedTLS 4 TLS settings on top of its defaults (MBEDTLS_USER_CONFIG_FILE),
- * as the Zephyr port sets them (ports/zephyr/include/tedge/
- * mbedtls_user_config.h, which explains them in full).
+ * mbedTLS 4 TLS settings on top of its defaults (MBEDTLS_USER_CONFIG_FILE).
  */
 
 /* The client only sends small records (MQTT publishes, HTTP request heads,
