@@ -8,7 +8,8 @@
 - [x] 1.6 Zephyr port: implement both in `ports/zephyr/src/tedge_port_net.c` with one sec tag per buffer and a per-connection tag list (raising `CONFIG_TLS_MAX_CREDENTIALS_NUMBER` for stored anchors is left to group 4; the compiled-in bundle uses the 4th of the default 4 slots)
 - [x] 1.7 Core: in `core/src/tedge_http.c`, open hosts outside the tenant's domain with `TEDGE_PORT_TLS_DOWNLOAD` (reuse the token-domain predicate from `tedge_http_download.c`); register the compiled-in download roots with the tenant bundle on the first connect
 - [x] 1.8 Host tests (POSIX): a local HTTPS server with a test CA added through the port call verifies only in download mode; the tenant mode rejects it
-- [ ] 1.9 Hardware check: firmware update from a GitHub release URL succeeds on the NuttX ESP32-C6 build and on Zephyr ESP32-S3-DevKitC; record the result in the PR
+- [x] 1.9 Hardware check on the NuttX ESP32-C6 (the incident's device, 2026-11-24): an image from this branch (0.17.3-trustroots) installed from the tenant, then a firmware update from the GitHub release URL of microcontroller-devices v0.17.2 downloaded through the redirect (1,341,360 B in 22 s), installed and confirmed; the same URL had failed three times with -13 on the old image. Recorded in the PR
+- [ ] 1.10 Same check on Zephyr ESP32-S3-DevKitC
 
 ## 2. Trust store in core (`core/src/tedge_trust.c`)
 
