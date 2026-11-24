@@ -96,6 +96,7 @@ size_t tedge_config_types_line(char *out, size_t len)
 
 TEDGE_PORT_STACK_DEFINE(cfg_stack, TEDGE_CONFIG_MGMT_STACK_SIZE);
 static tedge_port_thread_t cfg_thread;
+static bool cfg_started; /* cfg_thread has run at least once */
 static volatile bool job_running;
 
 static struct {
@@ -360,6 +361,13 @@ static int start(bool upload, const char *type, const char *url,
 		return -EBUSY;
 	}
 #endif
+	/* job_running drops just before the thread returns, and its stack is
+	 * the thread's until it has (os.h): wait for that before reusing it. */
+	if (cfg_started && tedge_port_thread_join(&cfg_thread, 2000) != 0) {
+		snprintf(reason, rlen, "busy: the previous configuration request "
+			 "is still ending");
+		return -EBUSY;
+	}
 	memset(&job, 0, sizeof(job));
 	job.upload = upload;
 	job.type = t;
@@ -380,6 +388,7 @@ static int start(bool upload, const char *type, const char *url,
 		snprintf(reason, rlen, "the device could not start the work");
 		return -ENOMEM;
 	}
+	cfg_started = true;
 	return 0;
 }
 
