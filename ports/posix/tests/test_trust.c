@@ -180,7 +180,10 @@ static void refused(const char *pem_a, const char *pem_b, const char *why)
 	char bank = active();
 	int ret;
 
-	memcpy(before, read_file(), file_len + 1);
+	/* Two statements: argument order is unspecified, and file_len is only
+	 * right once read_file() has run. */
+	read_file();
+	memcpy(before, file, file_len + 1);
 	ret = (pem_b != NULL) ? SET(pem_a, pem_b) : SET(pem_a);
 	CHECK(ret != 0);
 	if (strstr(reason, why) == NULL) {
