@@ -213,6 +213,46 @@ struct tedge_upload {
 };
 
 int tedge_upload(struct tedge_upload *req);
+/* --- Trusted roots (tedge_trust.c) --------------------------------------- */
+
+/** Give the port the roots trusted for downloads outside the tenant: those
+ *  of TEDGE_DOWNLOAD_CA_FILES and, with TEDGE_TRUSTED_ROOTS, the stored
+ *  set. Called on the first connection; later calls do nothing.
+ *  @return 0, or the port's negative errno. */
+int tedge_trust_register(void);
+
+/** The roots of TEDGE_C8Y_CA_FILES, PEM with its NUL (tedge_c8y.c). */
+const unsigned char *tedge_c8y_server_ca(size_t *len);
+
+#if defined(TEDGE_TRUSTED_ROOTS)
+/** How many stored roots are in force. */
+size_t tedge_trust_count(void);
+
+/**
+ * Replace the stored roots with the certificates of a PEM file, fed in
+ * pieces: begin, any number of chunks, then end (or abort). Each
+ * certificate is checked and stored as it arrives; the new set takes over
+ * only at a successful end, and applies from the next connection. Copies of
+ * compiled-in roots and repeats are skipped. One write at a time.
+ *
+ * begin: 0, -EBUSY (a write is open) or -ENOMEM.
+ * chunk: 0, or the negative errno of the first refusal; later chunks are
+ *        ignored once one is refused.
+ * end:   0, or a negative errno with @p reason set to why, naming the
+ *        certificate by position and subject.
+ */
+int tedge_trust_write_begin(void);
+int tedge_trust_write_chunk(const void *data, size_t len);
+int tedge_trust_write_end(char *reason, size_t cap);
+/** Drop an open write; the set in force stays. */
+void tedge_trust_write_abort(void);
+
+/** Write the trusted-roots file through @p sink: the compiled-in roots by
+ *  subject in comments, then each stored root as PEM after a comment with
+ *  its subject and expiry. The same bytes each time (tedge_producer_fn). */
+int tedge_trust_read(tedge_sink_fn sink, void *ctx);
+#endif
+
 /** Redirect targets can be ~1 KB (a release asset). */
 #define TEDGE_URL_MAX  1152
 #define TEDGE_HOST_MAX 128

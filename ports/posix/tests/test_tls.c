@@ -36,69 +36,7 @@ static int failures;
 		}                                                              \
 	} while (0)
 
-#define HOST "download.test"
-
-static int listen_fd;
-static volatile bool stopping;
-
-static int bio_send(void *ctx, const unsigned char *buf, size_t len)
-{
-	ssize_t n = send(*(int *)ctx, buf, len, 0);
-
-	return (n < 0) ? MBEDTLS_ERR_NET_SEND_FAILED : (int)n;
-}
-
-static int bio_recv(void *ctx, unsigned char *buf, size_t len)
-{
-	ssize_t n = recv(*(int *)ctx, buf, len, 0);
-
-	return (n < 0) ? MBEDTLS_ERR_NET_RECV_FAILED : (int)n;
-}
-
-/* Accepts connections one at a time and shakes hands with each, until the
- * test is done. Whether the client accepted is the client's to report. */
-static void *server(void *arg)
-{
-	mbedtls_x509_crt cert;
-	mbedtls_pk_context key;
-	mbedtls_ssl_config conf;
-
-	(void)arg;
-	mbedtls_x509_crt_init(&cert);
-	mbedtls_pk_init(&key);
-	mbedtls_ssl_config_init(&conf);
-	if (mbedtls_x509_crt_parse(&cert, (const unsigned char *)srv_cert,
-				   sizeof(srv_cert)) != 0 ||
-	    mbedtls_pk_parse_key(&key, (const unsigned char *)srv_key,
-				 sizeof(srv_key), NULL, 0) != 0 ||
-	    mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_SERVER,
-					MBEDTLS_SSL_TRANSPORT_STREAM,
-					MBEDTLS_SSL_PRESET_DEFAULT) != 0 ||
-	    mbedtls_ssl_conf_own_cert(&conf, &cert, &key) != 0) {
-		fprintf(stderr, "test server: setup failed\n");
-		failures++;
-		return NULL;
-	}
-	while (!stopping) {
-		int fd = accept(listen_fd, NULL, NULL);
-		mbedtls_ssl_context ssl;
-
-		if (fd < 0) {
-			continue;
-		}
-		mbedtls_ssl_init(&ssl);
-		if (mbedtls_ssl_setup(&ssl, &conf) == 0) {
-			mbedtls_ssl_set_bio(&ssl, &fd, bio_send, bio_recv, NULL);
-			(void)mbedtls_ssl_handshake(&ssl);
-		}
-		mbedtls_ssl_free(&ssl);
-		(void)close(fd);
-	}
-	mbedtls_ssl_config_free(&conf);
-	mbedtls_pk_free(&key);
-	mbedtls_x509_crt_free(&cert);
-	return NULL;
-}
+#include "test_tls_server.h"
 
 /* The roots TEDGE_DOWNLOAD_CA_FILES embeds, as the core does. */
 static const unsigned char default_download_ca[] = {
@@ -127,21 +65,6 @@ static void test_default_bundle(void)
 	mbedtls_x509_crt_free(&crt);
 }
 
-static const uint8_t lo[4] = { 127, 0, 0, 1 };
-static uint16_t port;
-
-/* Open a connection, and report whether the handshake was accepted. */
-static int try_connect(enum tedge_port_security security)
-{
-	int conn = tedge_port_connect(lo, port, security, HOST, 5000);
-
-	if (conn >= 0) {
-		tedge_port_close(conn);
-		return 0;
-	}
-	return conn;
-}
-
 int main(void)
 {
 	static const struct tedge_port_ca_buf dl[] = {
@@ -152,25 +75,10 @@ int main(void)
 		{ junk, sizeof(junk) },
 		{ dl_ca, sizeof(dl_ca) },
 	};
-	struct sockaddr_in sa = { .sin_family = AF_INET };
-	socklen_t len = sizeof(sa);
-	pthread_t thread;
-
-	if (psa_crypto_init() != PSA_SUCCESS) {
-		fprintf(stderr, "PSA did not start\n");
+	if (psa_crypto_init() != PSA_SUCCESS || server_start() != 0) {
 		return 1;
 	}
-	listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-	sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	if (bind(listen_fd, (struct sockaddr *)&sa, sizeof(sa)) != 0 ||
-	    listen(listen_fd, 4) != 0 ||
-	    getsockname(listen_fd, (struct sockaddr *)&sa, &len) != 0) {
-		perror("listen");
-		return 1;
-	}
-	port = ntohs(sa.sin_port);
 	test_default_bundle();
-	(void)pthread_create(&thread, NULL, server, NULL);
 
 	/* The tenant's root alone: no connection trusts the server. */
 	CHECK(tedge_port_tls_set_ca(tenant_ca, sizeof(tenant_ca)) == 0);
@@ -196,17 +104,7 @@ int main(void)
 	CHECK(tedge_port_tls_set_extra_ca(TEDGE_PORT_CA_DOWNLOAD, NULL, 1) ==
 	      -EINVAL);
 
-	stopping = true;
-	(void)shutdown(listen_fd, SHUT_RDWR);
-	{
-		/* Wake accept() on systems where shutdown() does not. */
-		int fd = socket(AF_INET, SOCK_STREAM, 0);
-
-		(void)connect(fd, (struct sockaddr *)&sa, sizeof(sa));
-		(void)close(fd);
-	}
-	(void)pthread_join(thread, NULL);
-	(void)close(listen_fd);
+	server_stop();
 	if (failures == 0) {
 		printf("all TLS trust checks passed\n");
 	}

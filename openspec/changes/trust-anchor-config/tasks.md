@@ -12,12 +12,12 @@
 
 ## 2. Trust store in core (`core/src/tedge_trust.c`)
 
-- [ ] 2.1 Storage layout: banked keys `tedge/trust/<scope>/{active,a/N,b/N}`, load active bank at `tedge_init()` into one heap block per scope and call `tedge_port_tls_set_extra_ca()`
-- [ ] 2.2 Atomic commit: write the inactive bank, delete leftover indexes, write `active`, load the new block, call the port, free the old block
-- [ ] 2.3 Streaming PEM splitter with a one-block buffer; decode each block to DER into a staging slot
-- [ ] 2.4 Validation: parse, CA basic constraint and key usage, validity period, key type supported by the build, size and count caps, skip built-in duplicates and repeats; reasons naming position and subject
-- [ ] 2.5 PEM writer for get: built-in subjects as comments, each extra as subject/expiry comment plus PEM (two passes through an upload sink, as log upload)
-- [ ] 2.6 Unit tests (`ports/zephyr/tests/unit` and POSIX tests): valid file, leaf cert, expired, too many, too large, built-in duplicate, empty file clears, reset between bank write and switch keeps old set
+- [x] 2.1 Storage layout: banked keys `tedge/trust/download/{active,a/N,b/N}`; load the active bank on the first connection (`tedge_trust_register()`) into one block of the client's heap and call `tedge_port_tls_set_extra_ca()`
+- [x] 2.2 Atomic commit: write each checked certificate to the inactive bank as it arrives (no staging buffer), delete leftover indexes, write `active`, load the new block, call the port, free the old block
+- [x] 2.3 Streaming PEM splitter with a one-block buffer; `mbedtls_x509_crt_parse()` decodes each block
+- [x] 2.4 Validation: parse, CA basic constraint and key usage, validity period, key type supported by the build, size and count caps, skip built-in duplicates and repeats; reasons naming position and subject
+- [x] 2.5 PEM writer for get: built-in subjects as comments, each extra as subject/expiry comment plus PEM (two passes through an upload sink, as log upload)
+- [x] 2.6 Tests (POSIX `tests/test_trust.c`, on the real key-value store and TLS stack): valid file, round trip of the get file, leaf cert, expired, not yet valid, no keyCertSign, too large, too many, unparsable, unterminated, built-in duplicate, CRLF and byte-at-a-time input, empty file clears, an unfinished set keeps the old one, and a stored root verifies a loopback download server. Not added to the Zephyr unit tests: the option is not in the Zephyr Kconfig until 4.1
 
 ## 3. Configuration operations in core (`core/src/tedge_config_mgmt.c`)
 
@@ -30,10 +30,10 @@
 
 ## 4. Build options
 
-- [ ] 4.1 Zephyr Kconfig: `TEDGE_CONFIG_MGMT`, `TEDGE_TRUSTED_ROOTS`, `TEDGE_TRUSTED_ROOTS_TENANT`, `TEDGE_TRUSTED_ROOTS_MAX`, `TEDGE_TRUSTED_ROOTS_MAX_DER`, with dependencies on firmware update's download path and log upload's upload path
+- [ ] 4.1 Zephyr Kconfig (and raise the default `TEDGE_HEAP_SIZE` by the stored roots' DER and one PEM block when `TEDGE_TRUSTED_ROOTS` is on): `TEDGE_CONFIG_MGMT`, `TEDGE_TRUSTED_ROOTS`, `TEDGE_TRUSTED_ROOTS_TENANT`, `TEDGE_TRUSTED_ROOTS_MAX`, `TEDGE_TRUSTED_ROOTS_MAX_DER`, with dependencies on firmware update's download path and log upload's upload path
 - [ ] 4.2 ESP-IDF Kconfig and component CMake for the same options
 - [ ] 4.3 NuttX Kconfig, `Make.defs`/CMake and `configs/small.conf` override (`MAX = 2`)
-- [ ] 4.4 POSIX `cmake/options.cmake`; Zephyr board profiles `esp32c6-devkitc.conf` and `esp32-devkitc.conf` override `MAX = 2`; add the feature to `profiles/full.conf`
+- [ ] 4.4 POSIX `cmake/options.cmake` (`TEDGE_TRUSTED_ROOTS`, `_MAX`, `_MAX_DER` added with group 2; `TEDGE_CONFIG_MGMT` still to add); Zephyr board profiles `esp32c6-devkitc.conf` and `esp32-devkitc.conf` override `MAX = 2`; add the feature to `profiles/full.conf`
 
 ## 5. Tenant scope (`tenant-roots`)
 

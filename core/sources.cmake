@@ -42,6 +42,7 @@ function(tedge_core_sources out prefix)
     tedge_http_download.c
     tedge_http_upload.c
     tedge_url.c
+    tedge_trust.c
   )
   _on(TEDGE_FIRMWARE_UPDATE tedge_firmware.c tedge_fw_decision.c)
   _on(TEDGE_SHELL_COMMAND tedge_shell_allow_list.c)

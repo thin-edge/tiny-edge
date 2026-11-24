@@ -220,30 +220,33 @@ management expects). An empty or certificate-free file clears them.
 ### 6. Streaming parse and validation (`tedge_trust.c`)
 
 The download is not held whole. `write_chunk` feeds a line splitter with a
-buffer of one PEM block (`TEDGE_TRUSTED_ROOTS_MAX_DER * 4 / 3 + 128`,
-about 2.2 KB by default, allocated for the duration of the operation). At
-each `END CERTIFICATE` the block is decoded (`mbedtls_pem_read_buffer`) into
-a staging slot of `TEDGE_TRUSTED_ROOTS_MAX_DER` bytes, and checked at once:
+buffer of one PEM block (about 2.2 KB with the default `MAX_DER`, from the
+client's heap for the duration of the operation). At each `END CERTIFICATE`
+the block is given to `mbedtls_x509_crt_parse()`, which decodes the PEM;
+the DER kept is the parsed certificate's `raw`. It is checked at once:
 
-1. Parses with `mbedtls_x509_crt_parse_der()`.
-2. Basic constraints say CA and the key usage, if present, allows
-   certificate signing.
-3. Not expired, when the clock is valid (the client only connects with a
-   valid clock, so in practice always). Not-yet-valid is rejected too.
-4. The public key type and size are ones this build can verify (checked by
-   building a verify context; an RSA root on an ECC-only build is rejected).
-5. Within `TEDGE_TRUSTED_ROOTS_MAX` certificates and
-   `TEDGE_TRUSTED_ROOTS_MAX_DER` bytes each.
+1. It parses. mbedTLS refuses a key type or curve the build lacks here,
+   so this is also the "key this device cannot verify" check.
+2. It is at most `TEDGE_TRUSTED_ROOTS_MAX_DER` bytes.
+3. A copy of a compiled-in root, or of a certificate earlier in the file,
+   is skipped.
+4. Basic constraints say CA (`mbedtls_x509_crt_get_ca_istrue()`; a
+   certificate without the extension is refused), and the key usage, if
+   present, allows certificate signing.
+5. Not expired and not yet valid, when the clock is valid (the client only
+   receives operations with a valid clock, so in practice always).
+6. Not more than `TEDGE_TRUSTED_ROOTS_MAX` certificates to store.
 
 The first failure aborts the whole file: `502` with a reason that names the
 certificate by position and subject, e.g. `certificate 2 (CN=Foo): not a CA
-certificate`. Nothing is stored. Self-signed is not required, so an
+certificate`. The set in force is unchanged. Self-signed is not required, so an
 intermediate can be an anchor when that is what the operator wants.
 
-Staging needs `MAX * MAX_DER` bytes (6 KB by default) only while a set runs;
-it is heap, freed afterwards, and the operation fails with
-`502,out of memory` rather than risking the connection if the allocation
-fails.
+There is no staging buffer for the whole set: each certificate that passes
+is written to the inactive bank (decision 7) straight away, so a set needs
+one PEM block of RAM however many certificates it holds. If the PEM block
+cannot be allocated, the set fails with "out of memory" rather than risking
+the connection.
 
 ### 7. Storage layout and atomic switch
 
@@ -260,9 +263,11 @@ stops at the first missing index. The format is a contract between firmware
 versions (kv.h's rule): it is versioned by the key path, and a future change
 uses a new path.
 
-On boot (in `tedge_init()` after `tedge_port_kv_init()`), `tedge_trust`
-loads the active bank of each scope into one heap block per scope, and calls
-`tedge_port_tls_set_extra_ca()`. After a successful set, it loads the new
+On the first connection (`tedge_trust_register()`, called where
+`tedge_c8y.c` registers the tenant bundle, so before any download),
+`tedge_trust` loads the active bank into one block of the client's heap and
+calls `tedge_port_tls_set_extra_ca()` with the compiled-in download bundle
+followed by the stored certificates. After a successful set, it loads the new
 bank into a new block, calls the port, then frees the old block (the port
 has replaced its pointers by then, which is the interface's rule).
 

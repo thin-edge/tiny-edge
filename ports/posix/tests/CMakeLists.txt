@@ -60,3 +60,16 @@ target_include_directories(tedge-tls-test PRIVATE
   ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(tedge-tls-test PRIVATE tedge::tedge)
 add_test(NAME tls COMMAND tedge-tls-test)
+
+# The stored roots: what a set accepts and refuses, and that they reach the
+# port. Needs the core's internal header, as the shell test does.
+if(TEDGE_TRUSTED_ROOTS)
+  add_executable(tedge-trust-test test_trust.c)
+  set_target_properties(tedge-trust-test PROPERTIES C_STANDARD 11)
+  target_compile_definitions(tedge-trust-test PRIVATE _POSIX_C_SOURCE=200809L
+    _DEFAULT_SOURCE _DARWIN_C_SOURCE)
+  target_include_directories(tedge-trust-test PRIVATE
+    $<TARGET_PROPERTY:tedge,INCLUDE_DIRECTORIES>)
+  target_link_libraries(tedge-trust-test PRIVATE tedge::tedge)
+  add_test(NAME trust COMMAND tedge-trust-test)
+endif()
