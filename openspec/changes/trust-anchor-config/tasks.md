@@ -61,3 +61,4 @@
 - [ ] 8.1 Measure flash and static RAM for `TEDGE_DOWNLOAD_CA_FILES` alone, and for `TEDGE_CONFIG_MGMT` with default options, on ESP32-S3-DevKitC, ESP32-C6-DevKitC, ESP32-DevKitC, QT Py ESP32-S3, ESP32-CAM and the NuttX ESP32-C6/S3 builds
 - [ ] 8.2 Measure peak heap during a firmware download with 0, 2 and 4 extra anchors on ESP32-C6-DevKitC (no PSRAM); adjust the defaults if the download fails
 - [ ] 8.3 Fill the measured numbers into proposal.md's build-options section
+- [ ] 8.4 Measure the configuration thread's stack high-water mark on each RTOS port (a get and a set). 64-bit Linux uses 22.6 KB (POSIX default now 32 KB); the defaults of 8 KB (Zephyr) and 12 KB (ESP-IDF, NuttX) are unmeasured

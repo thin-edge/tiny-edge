@@ -128,7 +128,7 @@ tedge_option(TEDGE_CERT_RENEW_ALARM_DAYS INT 7 "Raise an alarm when this many da
 tedge_option(TEDGE_CERT_RENEW_CHECK_HOURS INT 24 "Hours between certificate checks")
 
 tedge_option(TEDGE_CONFIG_MGMT BOOL ON "Configuration management (c8y_UploadConfigFile, c8y_DownloadConfigFile)")
-tedge_option(TEDGE_CONFIG_MGMT_STACK_SIZE INT 8192 "Stack of the configuration thread (unused on POSIX)")
+tedge_option(TEDGE_CONFIG_MGMT_STACK_SIZE INT 32768 "Stack of the configuration thread (with TEDGE_POSIX_THREAD_STACKS; measured 22.6 KB on 64-bit Linux)")
 tedge_option(TEDGE_CONFIG_MAX_BYTES INT 16384 "Largest configuration file the device downloads")
 tedge_option(TEDGE_TRUSTED_ROOTS BOOL ON "The trusted-roots configuration: stored roots for downloads outside the tenant")
 tedge_option(TEDGE_TRUSTED_ROOTS_MAX INT 4 "Most stored roots")
