@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/thin-edge/tiny-edge/compare/v0.8.1...v0.9.0) (2026-11-24)
+
+
+### Features
+
+* **cumulocity:** set up a tenant with one command ([6ed858e](https://github.com/thin-edge/tiny-edge/commit/6ed858ef968664f63fad5fdc21084b911fd299f1))
+* **cumulocity:** set up a tenant with one command ([d448909](https://github.com/thin-edge/tiny-edge/commit/d44890924386413e899db0a6260cbc858b414ab5))
+
 ## [0.8.1](https://github.com/thin-edge/tiny-edge/compare/v0.8.0...v0.8.1) (2026-11-19)
 
 
