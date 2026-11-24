@@ -448,6 +448,15 @@ config TEDGE_REMOTE_ACCESS_TWIN_SESSIONS
 config TEDGE_REMOTE_ACCESS_MDNS
 	bool "Resolve .local targets over mDNS"
 	default y
+	# The query goes to 224.0.0.251. Without NET_IGMP, NuttX's arp_out()
+	# has no multicast MAC mapping, treats the group as off-link and sends
+	# the frame to the default gateway, so no responder on the LAN sees it.
+	select NET_IGMP
+	---help---
+	  A remote-access target named "<host>.local" is resolved by a
+	  one-shot mDNS query that the client sends itself. Selects NET_IGMP,
+	  which NuttX needs to send to a multicast group on the link. Without
+	  this option a ".local" target fails with "mDNS is not built in".
 
 config TEDGE_REMOTE_ACCESS_RESOLVE_TIMEOUT_MS
 	int "How long each lookup of a target name waits (ms)"
