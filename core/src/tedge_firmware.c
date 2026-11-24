@@ -351,6 +351,11 @@ void tedge_fw_arm_confirm_deadline(void)
 /* The operation                                                             */
 /* ------------------------------------------------------------------------ */
 
+bool tedge_fw_busy(void)
+{
+	return job_running;
+}
+
 int tedge_fw_request(const char *line, char *reason, size_t rlen)
 {
 	char running[TEDGE_FW_VERSION_SIZE] = "";
@@ -369,6 +374,15 @@ int tedge_fw_request(const char *line, char *reason, size_t rlen)
 		snprintf(reason, rlen, "an update is already running");
 		return -EBUSY;
 	}
+#if defined(TEDGE_LOG_UPLOAD)
+	/* The HTTP client's buffers are static: one transfer at a time. */
+	if (tedge_log_busy()) {
+		TEDGE_LOG_WRN("firmware: refused %s: a log is being sent",
+			version);
+		snprintf(reason, rlen, "busy: a log is being sent");
+		return -EBUSY;
+	}
+#endif
 
 	/* Re-installing what is already running costs a download and the
 	 * downtime of a swap, for no change. */

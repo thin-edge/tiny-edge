@@ -251,6 +251,8 @@ struct tedge_log_event {
 int tedge_log_request(const char *line, char *reason, size_t rlen);
 /** Next result from the upload thread, or -ENOMSG. */
 int tedge_log_poll_event(struct tedge_log_event *ev);
+/** True while a log is being sent (the HTTP client is in use). */
+bool tedge_log_busy(void);
 /** Builds "118,<type>,…"; returns 0 when the image offers no log type. */
 size_t tedge_log_types_line(char *out, size_t len);
 /** Registers the client's own log; called once at startup. */
@@ -365,6 +367,8 @@ struct tedge_fw_event {
 
 /** Handle a "515,..." line: start an update, or fail with @p reason. */
 int tedge_fw_request(const char *line, char *reason, size_t rlen);
+/** True while a firmware download runs (the HTTP client is in use). */
+bool tedge_fw_busy(void);
 /** Next result from the download thread; 0 when @p ev was filled. */
 int tedge_fw_poll_event(struct tedge_fw_event *ev);
 /**
