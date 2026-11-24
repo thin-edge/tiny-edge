@@ -19,6 +19,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -31,9 +32,17 @@ static struct sockaddr_in server_sa;
 static pthread_t server_thread;
 static volatile bool stopping;
 
+/* A client that refuses the certificate hangs up mid-handshake: writing to
+ * it must fail, not raise SIGPIPE (Linux), which would end the test. */
+#if defined(MSG_NOSIGNAL)
+#define TEST_SEND_FLAGS MSG_NOSIGNAL
+#else
+#define TEST_SEND_FLAGS 0
+#endif
+
 static int bio_send(void *ctx, const unsigned char *buf, size_t len)
 {
-	ssize_t n = send(*(int *)ctx, buf, len, 0);
+	ssize_t n = send(*(int *)ctx, buf, len, TEST_SEND_FLAGS);
 
 	return (n < 0) ? MBEDTLS_ERR_NET_SEND_FAILED : (int)n;
 }
@@ -96,6 +105,9 @@ static const uint8_t lo[4] = { 127, 0, 0, 1 };
 static int server_start(void)
 {
 	socklen_t len = sizeof(server_sa);
+
+	/* macOS has no MSG_NOSIGNAL: ignore the signal for the whole test. */
+	(void)signal(SIGPIPE, SIG_IGN);
 
 	server_sa.sin_family = AF_INET;
 	server_sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);

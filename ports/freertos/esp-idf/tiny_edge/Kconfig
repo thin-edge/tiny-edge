@@ -316,13 +316,16 @@ endif # TEDGE_LOG_UPLOAD
 
 config TEDGE_CONFIG_MGMT
 	bool "Configuration management"
-	default y
+	default y if !IDF_TARGET_ESP32
 	select TEDGE_HTTP
 	help
 	  Answers Cumulocity's configuration operations
 	  (c8y_UploadConfigFile, c8y_DownloadConfigFile) for the
 	  configuration types below. A set downloads the file, which needs a
 	  second TLS session beside the MQTT one, as firmware update does.
+
+	  Off by default on the classic ESP32: its thread stack (in .bss)
+	  does not fit in dram0 beside every other feature.
 
 if TEDGE_CONFIG_MGMT
 

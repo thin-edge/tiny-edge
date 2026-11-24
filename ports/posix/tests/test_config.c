@@ -42,6 +42,7 @@ static int failures;
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -60,9 +61,17 @@ static char event_body[512];
 static char binary_body[8192];
 static char binary_headers[1024];
 
+/* A client that refuses the certificate hangs up mid-handshake: writing to
+ * it must fail, not raise SIGPIPE (Linux), which would end the test. */
+#if defined(MSG_NOSIGNAL)
+#define TEST_SEND_FLAGS MSG_NOSIGNAL
+#else
+#define TEST_SEND_FLAGS 0
+#endif
+
 static int bio_send(void *ctx, const unsigned char *buf, size_t len)
 {
-	ssize_t n = send(*(int *)ctx, buf, len, 0);
+	ssize_t n = send(*(int *)ctx, buf, len, TEST_SEND_FLAGS);
 
 	return (n < 0) ? MBEDTLS_ERR_NET_SEND_FAILED : (int)n;
 }
@@ -214,6 +223,9 @@ static int server_start(void)
 {
 	socklen_t len = sizeof(server_sa);
 
+	/* macOS has no MSG_NOSIGNAL: ignore the signal for the whole test. */
+	(void)signal(SIGPIPE, SIG_IGN);
+
 	server_sa.sin_family = AF_INET;
 	server_sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -282,7 +294,7 @@ static int set_from(const char *file, struct tedge_config_event *ev)
 
 static void test_requests(void)
 {
-	char line[64];
+	char line[128];
 	struct tedge_config_event ev;
 
 	CHECK(tedge_config_types_line(line, sizeof(line)) > 0);

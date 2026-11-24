@@ -269,7 +269,8 @@ static void subject_of(const mbedtls_x509_crt *crt, char *out, size_t cap)
 		return;
 	}
 	cn = strstr(dn, "CN=");
-	(void)snprintf(out, cap, "%s", (cn != NULL) ? cn : dn);
+	/* Bounded explicitly: a subject longer than @p out is cut. */
+	(void)snprintf(out, cap, "%.*s", (int)(cap - 1), (cn != NULL) ? cn : dn);
 	/* A CN is the last component in practice; cut anything after it. */
 	if (cn != NULL) {
 		char *comma = strstr(out, ", ");
@@ -282,7 +283,10 @@ static void subject_of(const mbedtls_x509_crt *crt, char *out, size_t cap)
 
 static void date_of(const mbedtls_x509_time *t, char *out, size_t cap)
 {
-	(void)snprintf(out, cap, "%04d-%02d-%02d", t->year, t->mon, t->day);
+	/* Within their ranges, so the date always fits. */
+	(void)snprintf(out, cap, "%04u-%02u-%02u",
+		       (unsigned int)t->year % 10000u, (unsigned int)t->mon % 100u,
+		       (unsigned int)t->day % 100u);
 }
 
 /* ------------------------------------------------------------------------ */
