@@ -314,6 +314,55 @@ config TEDGE_LOG_UPLOAD_STACK_SIZE
 
 endif # TEDGE_LOG_UPLOAD
 
+config TEDGE_CONFIG_MGMT
+	bool "Configuration management"
+	default y
+	select TEDGE_HTTP
+	help
+	  Answers Cumulocity's configuration operations
+	  (c8y_UploadConfigFile, c8y_DownloadConfigFile) for the
+	  configuration types below. A set downloads the file, which needs a
+	  second TLS session beside the MQTT one, as firmware update does.
+
+if TEDGE_CONFIG_MGMT
+
+config TEDGE_CONFIG_MGMT_STACK_SIZE
+	int "Stack of the configuration thread (bytes)"
+	default 12288
+	help
+	  TLS handshakes run on this thread, as on the upload thread, and a
+	  set parses certificates on it.
+
+config TEDGE_CONFIG_MAX_BYTES
+	int "Largest configuration file the device downloads (bytes)"
+	default 16384
+
+config TEDGE_TRUSTED_ROOTS
+	bool "The trusted-roots configuration"
+	default y
+	help
+	  Root certificates an operator adds from Cumulocity, trusted only
+	  for downloads from hosts outside the tenant, in addition to
+	  TEDGE_C8Y_CA_FILES and TEDGE_DOWNLOAD_CA_FILES. They never verify
+	  the tenant, and the compiled-in roots cannot be removed.
+
+config TEDGE_TRUSTED_ROOTS_MAX
+	int "Most stored roots"
+	default 4 if SPIRAM
+	default 2
+	range 1 8
+	depends on TEDGE_TRUSTED_ROOTS
+	help
+	  Each costs its DER size in the client heap, and about as much again
+	  in mbedTLS during each download. 2 without PSRAM.
+
+config TEDGE_TRUSTED_ROOTS_MAX_DER
+	int "Largest stored root (DER bytes)"
+	default 1536
+	depends on TEDGE_TRUSTED_ROOTS
+
+endif # TEDGE_CONFIG_MGMT
+
 config TEDGE_REMOTE_ACCESS
 	bool "Remote access (tunnel to the device and its network)"
 	default y
@@ -460,7 +509,9 @@ config TEDGE_THREAD_PRIORITY
 
 config TEDGE_HEAP_SIZE
 	int "Client heap allowance (bytes)"
+	default 20480 if TEDGE_PARAMETERS && TEDGE_TRUSTED_ROOTS
 	default 16384 if TEDGE_PARAMETERS
+	default 14336 if TEDGE_TRUSTED_ROOTS
 	default 10240
 	help
 	  The most the client takes from the heap at once, so its use is

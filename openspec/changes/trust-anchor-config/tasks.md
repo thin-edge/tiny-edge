@@ -28,14 +28,14 @@
 - [x] 3.4 `c8y_DownloadConfigFile`: executing, `tedge_download()` into the type's writer, success or failure with the reason; refused with "busy" during a firmware download or log upload, and those refuse while it runs
 - [x] 3.5 Failure paths: unknown type, feature not compiled in, out of memory, download error; each reported with the reason in the 502
 - [x] 3.6 POSIX `tests/test_config.c` against a fake HTTPS tenant on loopback: types line, unknown type, malformed request, a set, busy, a refused certificate, 404, oversize, and a get (identity lookup, event of the configuration type on the device, binary with the file, result URL, operation ids)
-- [ ] 3.7 Check both operations against a real tenant on a device (after group 4)
+- [ ] 3.7 Check both operations against a real tenant on a device. The NuttX image (0.17.4-config) and a script (`ports/nuttx/build-nuttx/devtest/run.sh`, not committed) are ready; not run yet
 
 ## 4. Build options
 
-- [ ] 4.1 Zephyr Kconfig (and raise the default `TEDGE_HEAP_SIZE` by the stored roots' DER and one PEM block when `TEDGE_TRUSTED_ROOTS` is on): `TEDGE_CONFIG_MGMT`, `TEDGE_TRUSTED_ROOTS`, `TEDGE_TRUSTED_ROOTS_TENANT`, `TEDGE_TRUSTED_ROOTS_MAX`, `TEDGE_TRUSTED_ROOTS_MAX_DER`, with dependencies on firmware update's download path and log upload's upload path
-- [ ] 4.2 ESP-IDF Kconfig and component CMake for the same options
-- [ ] 4.3 NuttX Kconfig, `Make.defs`/CMake and `configs/small.conf` override (`MAX = 2`)
-- [ ] 4.4 POSIX `cmake/options.cmake` (`TEDGE_TRUSTED_ROOTS`, `_MAX`, `_MAX_DER` added with group 2; `TEDGE_CONFIG_MGMT` still to add); Zephyr board profiles `esp32c6-devkitc.conf` and `esp32-devkitc.conf` override `MAX = 2`; add the feature to `profiles/full.conf`
+- [x] 4.1 Zephyr Kconfig: `TEDGE_CONFIG_MGMT` (off by default, selects `TEDGE_HTTP`), `TEDGE_CONFIG_MGMT_STACK_SIZE`, `TEDGE_CONFIG_MAX_BYTES`, `TEDGE_TRUSTED_ROOTS`, `TEDGE_TRUSTED_ROOTS_MAX` (4 with PSRAM, 2 without), `TEDGE_TRUSTED_ROOTS_MAX_DER`; `TEDGE_HEAP_SIZE` +4 KB with trusted roots; the port registers only the roots that fit the credential pool and a socket's tag list; Kconfig rule cases `config-mgmt-defaults` and `config-mgmt-absent`
+- [x] 4.2 ESP-IDF Kconfig for the same options (on by default, 2 roots without PSRAM, heap +4 KB); `sdkconfig.ci.small` turns it off. Built for esp32c6, full and small
+- [x] 4.3 NuttX Kconfig (on by default, 4 roots, heap 20 KB with trusted roots, `TEDGE_HTTP` follows it); `configs/small.conf` turns configuration management off instead of lowering the cap, since the PSRAM-less S3 has no room for its second TLS session. esp32c6 agent image built
+- [x] 4.4 POSIX `cmake/options.cmake` (all options, on by default; `TEDGE_HTTP` follows `TEDGE_CONFIG_MGMT`); Zephyr `profiles/full.conf` turns the feature on and raises `CONFIG_TLS_MAX_CREDENTIALS_NUMBER` to 8 and `CONFIG_NET_SOCKETS_TLS_MAX_CREDENTIALS` to 6. The no-PSRAM cap comes from the Kconfig default rather than board files
 
 ## 5. Tenant scope (`tenant-roots`)
 

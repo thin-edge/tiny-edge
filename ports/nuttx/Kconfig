@@ -324,6 +324,47 @@ config TEDGE_LOG_UPLOAD_STACK_SIZE
 	default 12288
 	depends on TEDGE_LOG_UPLOAD
 
+config TEDGE_CONFIG_MGMT
+	bool "Configuration management"
+	default y
+	---help---
+		Answers Cumulocity's configuration operations
+		(c8y_UploadConfigFile, c8y_DownloadConfigFile) for the
+		configuration types below. A set downloads the file, which
+		needs a second TLS session beside the MQTT one, as firmware
+		update does.
+
+config TEDGE_CONFIG_MGMT_STACK_SIZE
+	int "Stack of the configuration thread"
+	default 12288
+	depends on TEDGE_CONFIG_MGMT
+
+config TEDGE_CONFIG_MAX_BYTES
+	int "Largest configuration file the device downloads"
+	default 16384
+	depends on TEDGE_CONFIG_MGMT
+
+config TEDGE_TRUSTED_ROOTS
+	bool "The trusted-roots configuration"
+	default y
+	depends on TEDGE_CONFIG_MGMT
+	---help---
+		Root certificates an operator adds from Cumulocity, trusted
+		only for downloads from hosts outside the tenant, in addition
+		to TEDGE_C8Y_CA_FILES and TEDGE_DOWNLOAD_CA_FILES. They never
+		verify the tenant, and the compiled-in roots cannot be
+		removed.
+
+config TEDGE_TRUSTED_ROOTS_MAX
+	int "Most stored roots"
+	default 4
+	depends on TEDGE_TRUSTED_ROOTS
+
+config TEDGE_TRUSTED_ROOTS_MAX_DER
+	int "Largest stored root (DER bytes)"
+	default 1536
+	depends on TEDGE_TRUSTED_ROOTS
+
 config TEDGE_PARAMETERS
 	bool "Parameters"
 	default y
@@ -442,7 +483,7 @@ config TEDGE_PROVISIONING_STACK_SIZE
 
 config TEDGE_HTTP
 	bool
-	default y if TEDGE_LOG_UPLOAD || TEDGE_FIRMWARE_UPDATE
+	default y if TEDGE_LOG_UPLOAD || TEDGE_FIRMWARE_UPDATE || TEDGE_CONFIG_MGMT
 
 config TEDGE_HTTP_CLIENT
 	bool
@@ -458,6 +499,7 @@ config TEDGE_LOG_LEVEL
 
 config TEDGE_HEAP_SIZE
 	int "Bytes the client may allocate"
+	default 20480 if TEDGE_TRUSTED_ROOTS
 	default 16384
 
 config TEDGE_THREAD_STACK_SIZE

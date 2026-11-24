@@ -76,6 +76,10 @@ config TEDGE_FEATURE_AVAILABLE_CERT_RENEWAL
 	bool
 	default y
 
+config TEDGE_FEATURE_AVAILABLE_CONFIG_MGMT
+	bool
+	default y
+
 # --- Transport ----------------------------------------------------------------
 
 choice TEDGE_TRANSPORT
@@ -548,6 +552,77 @@ config TEDGE_LOG_UPLOAD_STACK_SIZE
 
 endif # TEDGE_LOG_UPLOAD
 
+config TEDGE_CONFIG_MGMT
+	bool "Configuration management"
+	depends on TEDGE_FEATURE_AVAILABLE_CONFIG_MGMT
+	select TEDGE_HTTP
+	help
+	  Answers Cumulocity's configuration operations
+	  (c8y_UploadConfigFile, c8y_DownloadConfigFile) for the
+	  configuration types below, and lists them in
+	  c8y_SupportedConfigurations. A set downloads the file, which needs
+	  a second TLS session beside the MQTT one, as firmware update does.
+
+if TEDGE_CONFIG_MGMT
+
+config TEDGE_CONFIG_MGMT_STACK_SIZE
+	int "Stack of the configuration thread"
+	default 8192
+	help
+	  Two TLS handshakes run on this thread for a get (the identity
+	  lookup and the upload), as for log upload, and a set parses
+	  certificates on it.
+
+config TEDGE_CONFIG_MAX_BYTES
+	int "Largest configuration file the device downloads"
+	default 16384
+	range 1024 262144
+	help
+	  A longer file is refused. Nothing of this size is held in RAM: the
+	  file is taken in as it arrives.
+
+config TEDGE_TRUSTED_ROOTS
+	bool "The trusted-roots configuration"
+	default y
+	help
+	  Root certificates an operator adds from Cumulocity, trusted only
+	  for downloads from hosts outside the tenant (a firmware URL on
+	  GitHub, say), in addition to CONFIG_TEDGE_C8Y_CA_FILES and
+	  CONFIG_TEDGE_DOWNLOAD_CA_FILES. They never verify the tenant, and
+	  the compiled-in roots cannot be removed. Each stored root costs its
+	  DER size (0.5 to 1.4 KB) in the client heap, and about as much again
+	  in the mbedTLS heap during each download.
+
+	  Each root is a TLS credential of its own: the client uses
+	  4 + CONFIG_TEDGE_TRUSTED_ROOTS_MAX of
+	  CONFIG_TLS_MAX_CREDENTIALS_NUMBER, and a download socket lists
+	  2 + CONFIG_TEDGE_TRUSTED_ROOTS_MAX tags, limited by
+	  CONFIG_NET_SOCKETS_TLS_MAX_CREDENTIALS. Roots that do not fit are
+	  not used, and the client logs that.
+
+if TEDGE_TRUSTED_ROOTS
+
+config TEDGE_TRUSTED_ROOTS_MAX
+	int "Most stored roots"
+	default 4 if ESP_SPIRAM
+	default 2
+	range 1 8
+	help
+	  2 on boards whose mbedTLS heap is in internal RAM, where a download
+	  already runs beside the MQTT session.
+
+config TEDGE_TRUSTED_ROOTS_MAX_DER
+	int "Largest stored root (DER bytes)"
+	default 1536
+	range 512 4096
+	help
+	  1536 holds an RSA-4096 root. A set needs one PEM block of this size
+	  (about 4/3 of it) from the client heap while it runs.
+
+endif # TEDGE_TRUSTED_ROOTS
+
+endif # TEDGE_CONFIG_MGMT
+
 config TEDGE_REMOTE_ACCESS
 	bool "Remote access (tunnel to the device and its network)"
 	depends on TEDGE_FEATURE_AVAILABLE_REMOTE_ACCESS
@@ -798,7 +873,9 @@ config TEDGE_THREAD_PRIORITY
 
 config TEDGE_HEAP_SIZE
 	int "Client heap size (bytes)"
+	default 20480 if TEDGE_PARAMETERS && TEDGE_TRUSTED_ROOTS
 	default 16384 if TEDGE_PARAMETERS
+	default 14336 if TEDGE_TRUSTED_ROOTS
 	default 10240
 	help
 	  The client allocates only from this heap, never from the
@@ -810,7 +887,8 @@ config TEDGE_HEAP_SIZE
 	  live at the same time as twin work, so 10 KB holds them with
 	  margin. The health telemetry's free-heap value (tedge_heap_free)
 	  shows what a build leaves after enrolment, a firmware update and a
-	  twin update; keep it above 2 KB, or raise this.
+	  twin update; keep it above 2 KB, or raise this. The trusted roots
+	  add 4 KB: the stored roots and, while a set runs, one PEM block.
 
 config TEDGE_HEAP_NOINIT
 	bool "Keep the client heap in .noinit"

@@ -198,19 +198,22 @@ int tedge_port_tls_set_extra_ca(enum tedge_port_ca_scope scope,
 {
 	int ret = 0;
 
+	size_t fit = MIN(count, (size_t)TAG_DOWNLOAD_CA_MAX);
+
 	if (scope != TEDGE_PORT_CA_DOWNLOAD || (count > 0 && bufs == NULL)) {
 		return -EINVAL;
 	}
-	if (count > TAG_DOWNLOAD_CA_MAX) {
-		return -ENOSPC;
-	}
+	/* A download socket lists the tenant's tag and these: never more than
+	 * a socket takes, or setting the list would fail and leave the
+	 * socket with no roots at all. */
+	fit = MIN(fit, (size_t)(CONFIG_NET_SOCKETS_TLS_MAX_CREDENTIALS - 1));
 	k_mutex_lock(&download_ca_lock, K_FOREVER);
 	for (size_t i = 0; i < download_ca_count; i++) {
 		(void)tls_credential_delete(TAG_DOWNLOAD_CA_BASE + i,
 					    TLS_CREDENTIAL_CA_CERTIFICATE);
 	}
 	download_ca_count = 0;
-	for (size_t i = 0; i < count; i++) {
+	for (size_t i = 0; i < fit; i++) {
 		ret = tls_credential_add(TAG_DOWNLOAD_CA_BASE + i,
 					 TLS_CREDENTIAL_CA_CERTIFICATE,
 					 bufs[i].data, bufs[i].len);
@@ -222,6 +225,9 @@ int tedge_port_tls_set_extra_ca(enum tedge_port_ca_scope scope,
 		download_ca_count = i + 1;
 	}
 	k_mutex_unlock(&download_ca_lock);
+	if (ret == 0 && fit < count) {
+		ret = -ENOSPC; /* the first ones are in use */
+	}
 	return ret;
 }
 
