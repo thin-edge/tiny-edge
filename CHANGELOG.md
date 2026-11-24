@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.10.0](https://github.com/thin-edge/tiny-edge/compare/v0.9.0...v0.10.0) (2026-11-24)
+
+
+### Features
+
+* configuration management options on every port ([89b3d7b](https://github.com/thin-edge/tiny-edge/commit/89b3d7bf38c0f3dd50fb31306285d6343cad0e5a))
+* **core:** configuration management for the trusted roots ([e3d478b](https://github.com/thin-edge/tiny-edge/commit/e3d478b1dc1bbd82f2ecefa18d310d806b827569))
+* **core:** store extra trusted roots for downloads ([5f0fb69](https://github.com/thin-edge/tiny-edge/commit/5f0fb697d96f17261e602c0f2eef1e262df181e7))
+* trust GitHub's roots for downloads and propose trust anchor management ([7feb9ea](https://github.com/thin-edge/tiny-edge/commit/7feb9eac2e3f01efdcee12cbcb582e4611015bd8))
+* trust GitHub's roots for downloads outside the tenant ([95c8835](https://github.com/thin-edge/tiny-edge/commit/95c8835fc42d2986df1a4013f17580eb899eb858))
+
+
+### Bug Fixes
+
+* CI failures in the trusted-roots tests and builds ([2d5f811](https://github.com/thin-edge/tiny-edge/commit/2d5f8117d14c40b01ee20ecdc593e252c9be0cc6))
+* **core:** refuse a log upload during a firmware download, and back ([57db193](https://github.com/thin-edge/tiny-edge/commit/57db193a6efe45d0b52af594e24df4a25e9a0c38))
+* **core:** refuse a log upload during a firmware download, and back ([ec127e4](https://github.com/thin-edge/tiny-edge/commit/ec127e47e5c9a793fccb2136bac8f828a18f84f1))
+* **core:** wait for the configuration thread before reusing its stack ([31b23fc](https://github.com/thin-edge/tiny-edge/commit/31b23fce1529e7c2b752dca2bc1f0f80decc36ec))
+* **posix:** a configuration thread stack that holds a TLS handshake ([a84b54b](https://github.com/thin-edge/tiny-edge/commit/a84b54b668a2fb3ffa6aac7b4cb636da1de21d34))
+
 ## [0.9.0](https://github.com/thin-edge/tiny-edge/compare/v0.8.1...v0.9.0) (2026-11-24)
 
 
