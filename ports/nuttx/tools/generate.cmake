@@ -7,6 +7,8 @@
 #
 #   <dir>/tedge_config.h       the core's TEDGE_* options, from CONFIG_TEDGE_*
 #   <dir>/tedge_ca_bundle.inc  the trust anchors in TEDGE_C8Y_CA_FILES
+#   <dir>/tedge_download_ca.inc  the download-only roots in
+#                              TEDGE_DOWNLOAD_CA_FILES
 #   <dir>/sources.mk           the core's and the provisioning library's
 #                              sources for the options that are on, from
 #                              core/sources.cmake: the list every port uses
@@ -89,6 +91,12 @@ foreach(_pem ${_ca_files})
 endforeach()
 string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," _bundle "${_bundle}")
 file(CONFIGURE OUTPUT ${OUT}/tedge_ca_bundle.inc CONTENT "${_bundle}\n")
+
+# --- tedge_download_ca.inc ----------------------------------------------
+
+include(${TEDGE_ROOT}/ports/common/cmake/tedge_ca_bundle.cmake)
+string(REGEX REPLACE "^\"(.*)\"$" "\\1" _dl_files "${TEDGE_DOWNLOAD_CA_FILES}")
+tedge_download_ca_bundle(${OUT} "${_dl_files}")
 
 # --- sources.mk ---------------------------------------------------------
 

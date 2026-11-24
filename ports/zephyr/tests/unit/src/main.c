@@ -2190,6 +2190,26 @@ void tedge_port_close(int conn)
 	ARG_UNUSED(conn);
 }
 
+ZTEST(tedge_http, test_security_by_host)
+{
+	/* The tenant, and the tenant-ID host it serves binaries from, verify
+	 * against the tenant's anchors only. */
+	zassert_equal(tedge_http_security("tedge-dev05.preprod.c8y.io", true),
+		      TEDGE_PORT_TLS);
+	zassert_equal(tedge_http_security("t297258657.preprod.c8y.io", true),
+		      TEDGE_PORT_TLS);
+	/* Anywhere else may also use the download-only roots. */
+	zassert_equal(tedge_http_security("github.com", true),
+		      TEDGE_PORT_TLS_DOWNLOAD);
+	zassert_equal(tedge_http_security(
+			      "release-assets.githubusercontent.com", true),
+		      TEDGE_PORT_TLS_DOWNLOAD);
+	zassert_equal(tedge_http_security("preprod.c8y.io.evil.example", true),
+		      TEDGE_PORT_TLS_DOWNLOAD);
+	/* Plain HTTP stays plain. */
+	zassert_equal(tedge_http_security("github.com", false), TEDGE_PORT_TCP);
+}
+
 ZTEST(tedge_http, test_exchange)
 {
 	static const char *const headers[] = { "Accept: application/json\r\n",

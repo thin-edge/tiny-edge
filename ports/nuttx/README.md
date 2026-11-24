@@ -241,7 +241,7 @@ every option took, and builds. It writes to
 | ESP32-C6-DevKitC | `build.sh esp32c6-devkitc --agent` | Every feature |
 | ESP32-S3 with octal PSRAM (`N8R8`, `N16R8`, ...) | `build.sh esp32s3-devkit --agent --extra /ws/tiny-edge/ports/nuttx/configs/esp32s3-psram-octal.conf` | Every feature. The image does not start on a board without PSRAM |
 | ESP32-S3 with quad PSRAM (`N8R2`, ...) | As above, with a copy of `configs/esp32s3-psram-octal.conf` that sets `CONFIG_ESP32S3_SPIRAM_MODE_QUAD=y` instead of `_MODE_OCT` | Not tested |
-| ESP32-S3 without PSRAM (`N8`, ...) | `build.sh esp32s3-devkit --agent --extra /ws/tiny-edge/ports/nuttx/configs/small.conf` | The reduced set: no firmware update, shell command, log upload, or remote access, which need a second TLS session the internal RAM has no room for |
+| ESP32-S3 without PSRAM (`N8`, ...) | `build.sh esp32s3-devkit --agent --extra /ws/tiny-edge/ports/nuttx/configs/small.conf` | The reduced set: no firmware update, shell command, log upload, configuration management, or remote access, which need a second TLS session the internal RAM has no room for |
 | ESP32-C3-DevKitM | `build.sh esp32c3-devkit --agent` | Builds; not run (see Status) |
 
 The module's name says which an ESP32-S3 board has: the letters after the

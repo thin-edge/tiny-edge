@@ -78,5 +78,11 @@ if(CONFIG_TEDGE)
     file(WRITE ${_bundle_pem} "${_bundle}")
     generate_inc_file_for_target(tedge ${_bundle_pem}
       ${ZEPHYR_BINARY_DIR}/include/generated/tedge_ca_bundle.inc)
+
+    # Roots for downloads from hosts outside the tenant only
+    # (CONFIG_TEDGE_DOWNLOAD_CA_FILES), embedded as tedge_download_ca.inc.
+    include(${TEDGE_ROOT}/ports/common/cmake/tedge_ca_bundle.cmake)
+    tedge_download_ca_bundle(${CMAKE_CURRENT_BINARY_DIR}/generated
+      "${CONFIG_TEDGE_DOWNLOAD_CA_FILES}")
   endif()
 endif()

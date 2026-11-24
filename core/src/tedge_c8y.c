@@ -55,6 +55,12 @@ static const unsigned char server_ca[] = {
 	0x00
 };
 
+const unsigned char *tedge_c8y_server_ca(size_t *len)
+{
+	*len = sizeof(server_ca);
+	return server_ca;
+}
+
 
 /* Downstream topics: thin-edge.io's Cumulocity bridge set, minus the
  * bootstrap topics (tedge_bootstrap.c owns those). */
@@ -346,8 +352,10 @@ static void op_finished_lines(const char *name, bool ok, const char *text)
 }
 #endif
 
-#if defined(TEDGE_RESTART) || defined(TEDGE_FIRMWARE_UPDATE)
-/* Completes an operation whose id was kept across a reboot. */
+#if defined(TEDGE_RESTART) || defined(TEDGE_FIRMWARE_UPDATE) || \
+	defined(TEDGE_CONFIG_MGMT)
+/* Completes an operation whose id was kept across a reboot, or by a
+ * worker thread that finishes after other operations have arrived. */
 static void op_finish_by_id(const char *id, const char *name, bool ok,
 			    const char *text)
 {
@@ -652,6 +660,31 @@ static void dispatch_operation(const char *line)
 		snprintf(op_name, sizeof(op_name), "c8y_Command");
 		break;
 #endif
+	case 524: /* c8y_DownloadConfigFile */
+	case 526: /* c8y_UploadConfigFile */
+	{
+		const char *name = (tmpl == 524) ? "c8y_DownloadConfigFile"
+						 : "c8y_UploadConfigFile";
+#if defined(TEDGE_CONFIG_MGMT)
+		char reason[160];
+		int ret;
+
+		op_executing_now(name);
+		ret = (tmpl == 524)
+			? tedge_config_request_download(line, current_op_id,
+							reason, sizeof(reason))
+			: tedge_config_request_upload(line, current_op_id,
+						      reason, sizeof(reason));
+		if (ret != 0) {
+			op_failed(name, reason);
+		}
+#else
+		op_unsupported(name, "configuration management is not built "
+			       "into this image ("
+			       TEDGE_CONFIG_NAME(TEDGE_CONFIG_MGMT) ")");
+#endif
+		return;
+	}
 	case 522:
 #if defined(TEDGE_LOG_UPLOAD)
 	{
@@ -822,7 +855,7 @@ static int subscribe_one(const char *topic)
 /* The operations this image can actually run. */
 static void publish_supported_ops(void)
 {
-	char line[160];
+	char line[256];
 	size_t n = tedge_appendf(line, sizeof(line), 0, "114");
 
 	if (TEDGE_IS_ENABLED(TEDGE_RESTART)) {
@@ -840,6 +873,17 @@ static void publish_supported_ops(void)
 	if (TEDGE_IS_ENABLED(TEDGE_LOG_UPLOAD)) {
 		n = tedge_appendf(line, sizeof(line), n, ",c8y_LogfileRequest");
 	}
+#if defined(TEDGE_CONFIG_MGMT)
+	/* Only with a type to offer: the operations are useless without one. */
+	char config_types[160];
+	bool have_config_types = tedge_config_types_line(
+		config_types, sizeof(config_types)) > 0;
+
+	if (have_config_types) {
+		n = tedge_appendf(line, sizeof(line), n,
+				  ",c8y_UploadConfigFile,c8y_DownloadConfigFile");
+	}
+#endif
 	for (int i = 0; i < OP_SLOTS; i++) {
 		if (ops[i].name != NULL) {
 			n = tedge_appendf(line, sizeof(line), n, ",%s", ops[i].name);
@@ -862,6 +906,13 @@ static void publish_supported_ops(void)
 		if (tedge_log_types_line(logs, sizeof(logs)) > 0) {
 			(void)tedge_c8y_publish_sr(logs);
 		}
+	}
+#endif
+#if defined(TEDGE_CONFIG_MGMT)
+	/* c8y_SupportedConfigurations: the files this image can read and
+	 * replace. */
+	if (have_config_types) {
+		(void)tedge_c8y_publish_sr(config_types);
 	}
 #endif
 }
@@ -1234,6 +1285,16 @@ static int c8y_connect(void)
 				      ret);
 			return ret;
 		}
+#if defined(TEDGE_HTTP)
+		/* The roots for downloads outside the tenant
+		 * (tedge_trust.c). Without them such downloads verify
+		 * against the tenant's roots only. */
+		ret = tedge_trust_register();
+		if (ret != 0) {
+			TEDGE_LOG_WRN("could not register the download "
+				      "roots (%d)", ret);
+		}
+#endif
 		ca_registered = true;
 	}
 
@@ -1353,6 +1414,18 @@ static int c8y_poll(int timeout_ms)
 			 * cut. A command with a lot to say belongs behind a
 			 * log type. */
 			op_finished_lines("c8y_Command", ev.rc == 0, ev.output);
+		}
+	}
+#endif
+#if defined(TEDGE_CONFIG_MGMT)
+	{
+		struct tedge_config_event ev;
+
+		/* Finished by the id kept with the job: other operations may
+		 * have arrived while the file was on its way. */
+		while (tedge_config_poll_event(&ev) == 0) {
+			op_finish_by_id(ev.op_id, ev.op_name, ev.rc == 0,
+					ev.text);
 		}
 	}
 #endif

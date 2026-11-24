@@ -17,6 +17,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <tedge/port/net.h>
+
 /**
  * A piece of a response header's value. @p name is the header's name in
  * lower case (cut at 31 characters). A long value arrives in several
@@ -132,6 +134,11 @@ int tedge_http_exchange(int conn, const struct tedge_http_request *req,
  */
 int tedge_http_connect(const char *host, uint16_t port, bool tls,
 		       uint32_t timeout_ms);
+
+/** How tedge_http_connect() secures a connection to @p host: TCP without
+ *  @p tls; TLS against the tenant's anchors for a host in the tenant's
+ *  domain; TLS against those plus the download-only roots otherwise. */
+enum tedge_port_security tedge_http_security(const char *host, bool tls);
 
 /** Send all of @p len bytes. @return 0, or a negative errno. */
 int tedge_http_send_all(int conn, const void *data, size_t len);
