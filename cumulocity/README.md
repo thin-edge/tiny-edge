@@ -46,6 +46,13 @@ path/to/tiny-edge/cumulocity/setup-tenant.sh --dtm-dir cumulocity/dtm
 path/to/tiny-edge/cumulocity/dtm/register.sh --dir cumulocity/dtm   # only the application's sets
 ```
 
+Set up the tenant before devices connect, or reconnect them afterwards
+(a restart is enough). A device sends its twin fragments (`c8y_Agent`,
+`c8y_Hardware`, `remoteAccess` and every parameter set) once per
+connection. Without the twin Smart Function those messages are dropped, so a
+device that connected first shows no Parameters tab until it reconnects.
+Measurements recover on their own because the device keeps sending them.
+
 `--no-smart-functions` and `--no-dtm` skip steps 2 and 3 (`--dtm-dir` sets
 are still registered). `--help` lists every option.
 

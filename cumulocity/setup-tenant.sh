@@ -140,3 +140,6 @@ if [[ $failed -eq 1 ]]; then
 	exit 1
 fi
 echo "Done."
+if [[ $deploy_rules -eq 1 && $dry -eq 0 ]]; then
+	echo "Devices that were already connected send their twin fragments again only when they reconnect: restart them to get the Parameters tab."
+fi
