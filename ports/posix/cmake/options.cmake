@@ -69,6 +69,8 @@ tedge_derived(TEDGE_TRANSPORT_C8Y BOOL ON)
 tedge_option(TEDGE_C8Y_URL STRING "" "Cumulocity tenant host (may also be set at run time)")
 tedge_option(TEDGE_C8Y_CA_FILES STRING "certs/godaddy-root-g2.pem"
   "Trust anchors for the tenant (PEM files, space-separated, relative to the repository)")
+tedge_option(TEDGE_DOWNLOAD_CA_FILES STRING "certs/isrg-root-x1.pem certs/usertrust-ecc.pem"
+  "Roots trusted only for downloads from hosts outside the tenant (PEM files, space-separated)")
 tedge_option(TEDGE_C8Y_OPERATION_JSON BOOL ON "Receive operations with their id (devicecontrol/notifications)")
 if(TEDGE_C8Y_OPERATION_JSON)
   set(_payload 2048)

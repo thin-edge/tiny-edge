@@ -266,6 +266,8 @@ int tedge_common_psa_init(void)
 TEDGE_PORT_MUTEX_DEFINE(cred_lock);
 static const void *ca_pem;
 static size_t ca_len;
+static const struct tedge_port_ca_buf *dl_bufs;
+static size_t dl_count;
 static const void *device_cert;
 static size_t device_cert_len;
 
@@ -274,6 +276,20 @@ int tedge_port_tls_set_ca(const void *pem, size_t len)
 	tedge_port_mutex_lock(&cred_lock);
 	ca_pem = pem;
 	ca_len = len;
+	tedge_port_mutex_unlock(&cred_lock);
+	return 0;
+}
+
+int tedge_port_tls_set_extra_ca(enum tedge_port_ca_scope scope,
+				const struct tedge_port_ca_buf *bufs,
+				size_t count)
+{
+	if (scope != TEDGE_PORT_CA_DOWNLOAD || (count > 0 && bufs == NULL)) {
+		return -EINVAL;
+	}
+	tedge_port_mutex_lock(&cred_lock);
+	dl_bufs = (count > 0) ? bufs : NULL;
+	dl_count = count;
 	tedge_port_mutex_unlock(&cred_lock);
 	return 0;
 }
@@ -343,6 +359,21 @@ static int tls_setup(struct conn *c, enum tedge_port_security security,
 	ret = (ca_pem != NULL)
 		      ? mbedtls_x509_crt_parse(&c->ca, ca_pem, ca_len)
 		      : MBEDTLS_ERR_X509_BAD_INPUT_DATA;
+	if (ret == 0 && security == TEDGE_PORT_TLS_DOWNLOAD) {
+		/* Extra anchors only add trust: one that does not parse is
+		 * skipped, never a reason to refuse the connection. */
+		for (size_t i = 0; i < dl_count; i++) {
+			int r = mbedtls_x509_crt_parse(&c->ca, dl_bufs[i].data,
+						       dl_bufs[i].len);
+
+			if (r != 0) {
+				TEDGE_LOG_WRN("TLS: download anchor %u: %d "
+					      "certificate(s) skipped (%d)",
+					      (unsigned int)i,
+					      (r > 0) ? r : 1, r);
+			}
+		}
+	}
 	if (ret == 0 && security == TEDGE_PORT_TLS_DEVICE) {
 		what = "device certificate";
 		ret = (device_cert != NULL)
@@ -389,7 +420,19 @@ static int tls_setup(struct conn *c, enum tedge_port_security security,
 	return 0;
 }
 
-static int tls_handshake(struct conn *c, const char *hostname, int64_t deadline)
+/* How many anchors a connection verifies against, for the log. */
+static unsigned int anchor_count(const mbedtls_x509_crt *crt)
+{
+	unsigned int n = 0;
+
+	for (; crt != NULL && crt->raw.len > 0; crt = crt->next) {
+		n++;
+	}
+	return n;
+}
+
+static int tls_handshake(struct conn *c, enum tedge_port_security security,
+			 const char *hostname, int64_t deadline)
 {
 	for (;;) {
 		int ret = mbedtls_ssl_handshake(&c->ssl);
@@ -421,7 +464,11 @@ static int tls_handshake(struct conn *c, const char *hostname, int64_t deadline)
 				mbedtls_ssl_get_verify_result(&c->ssl));
 			info[strcspn(info, "\n")] = '\0';
 			TEDGE_LOG_ERR("TLS: %s: the server's certificate is not "
-				      "trusted: %s", hostname, info);
+				      "trusted: %s (%u anchor(s) tried: %s)",
+				      hostname, info, anchor_count(&c->ca),
+				      (security == TEDGE_PORT_TLS_DOWNLOAD)
+					      ? "tenant + download roots"
+					      : "tenant roots only");
 			return -EACCES;
 		}
 		TEDGE_LOG_WRN("TLS: %s: the handshake failed (-0x%04x)", hostname,
@@ -479,7 +526,7 @@ int tedge_port_connect(const uint8_t addr[4], uint16_t port,
 	if (tls) {
 		ret = tls_setup(c, security, hostname);
 		if (ret == 0) {
-			ret = tls_handshake(c, hostname, deadline);
+			ret = tls_handshake(c, security, hostname, deadline);
 		}
 		if (ret != 0) {
 			goto fail;

@@ -185,6 +185,46 @@ int tedge_port_tls_set_ca(const void *pem, size_t len)
 				  pem, len);
 }
 
+/* Zephyr keeps the pointer of each credential (the interface's rule), and
+ * holds one CA credential per tag, so each buffer gets its own tag. A
+ * socket parses its credentials when it connects: replacing them never
+ * reaches a connection already open. */
+static K_MUTEX_DEFINE(download_ca_lock);
+static size_t download_ca_count;
+
+int tedge_port_tls_set_extra_ca(enum tedge_port_ca_scope scope,
+				const struct tedge_port_ca_buf *bufs,
+				size_t count)
+{
+	int ret = 0;
+
+	if (scope != TEDGE_PORT_CA_DOWNLOAD || (count > 0 && bufs == NULL)) {
+		return -EINVAL;
+	}
+	if (count > TAG_DOWNLOAD_CA_MAX) {
+		return -ENOSPC;
+	}
+	k_mutex_lock(&download_ca_lock, K_FOREVER);
+	for (size_t i = 0; i < download_ca_count; i++) {
+		(void)tls_credential_delete(TAG_DOWNLOAD_CA_BASE + i,
+					    TLS_CREDENTIAL_CA_CERTIFICATE);
+	}
+	download_ca_count = 0;
+	for (size_t i = 0; i < count; i++) {
+		ret = tls_credential_add(TAG_DOWNLOAD_CA_BASE + i,
+					 TLS_CREDENTIAL_CA_CERTIFICATE,
+					 bufs[i].data, bufs[i].len);
+		if (ret != 0) {
+			/* -ENOMEM: CONFIG_TLS_MAX_CREDENTIALS_NUMBER is too
+			 * small. The anchors added so far stay usable. */
+			break;
+		}
+		download_ca_count = i + 1;
+	}
+	k_mutex_unlock(&download_ca_lock);
+	return ret;
+}
+
 /* --- Connections --------------------------------------------------------- */
 
 int tedge_port_connect(const uint8_t addr[4], uint16_t port,
@@ -215,7 +255,22 @@ int tedge_port_connect(const uint8_t addr[4], uint16_t port,
 						? tags_device : tags_server;
 		size_t size = (security == TEDGE_PORT_TLS_DEVICE)
 				      ? sizeof(tags_device) : sizeof(tags_server);
+		sec_tag_t tags_download[1 + TAG_DOWNLOAD_CA_MAX] = {
+			TAG_SERVER_CA
+		};
 
+		if (security == TEDGE_PORT_TLS_DOWNLOAD) {
+			size_t n;
+
+			k_mutex_lock(&download_ca_lock, K_FOREVER);
+			n = download_ca_count;
+			k_mutex_unlock(&download_ca_lock);
+			for (size_t i = 0; i < n; i++) {
+				tags_download[1 + i] = TAG_DOWNLOAD_CA_BASE + i;
+			}
+			tags = tags_download;
+			size = (1 + n) * sizeof(sec_tag_t);
+		}
 		(void)zsock_setsockopt(fd, ZSOCK_SOL_TLS, ZSOCK_TLS_SEC_TAG_LIST,
 				       tags, size);
 		(void)zsock_setsockopt(fd, ZSOCK_SOL_TLS, ZSOCK_TLS_HOSTNAME,

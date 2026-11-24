@@ -32,6 +32,16 @@ config TEDGE_C8Y_CA_FILES
 	  embedded and given to TLS as the server's trust anchors. The default
 	  is the root the *.cumulocity.com chains end in.
 
+config TEDGE_DOWNLOAD_CA_FILES
+	string "Roots for downloads outside the tenant (PEM files, space-separated)"
+	default "certs/isrg-root-x1.pem certs/usertrust-ecc.pem"
+	help
+	  Trusted, in addition to TEDGE_C8Y_CA_FILES, only for HTTPS
+	  downloads from hosts outside the tenant's domain, such as a
+	  firmware URL on GitHub and the host it redirects to. Never used for
+	  the MQTT session, remote access or the tenant's own HTTP calls.
+	  Empty: such downloads verify against the tenant's anchors only.
+
 config TEDGE_SNTP
 	bool "Set the clock with SNTP when it is not already valid"
 	default y

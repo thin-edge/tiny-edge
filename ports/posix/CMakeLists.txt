@@ -110,9 +110,12 @@ target_link_libraries(tedge PUBLIC ${TEDGE_MBEDTLS_LIBRARIES} Threads::Threads)
 tedge_generate_config(${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 # Trust anchors: every PEM in TEDGE_C8Y_CA_FILES, embedded as
-# tedge_ca_bundle.inc, as the other ports do.
+# tedge_ca_bundle.inc, and the download-only roots in
+# TEDGE_DOWNLOAD_CA_FILES as tedge_download_ca.inc, as the other ports do.
 include(${TEDGE_ROOT}/ports/common/cmake/tedge_ca_bundle.cmake)
 tedge_ca_bundle(${CMAKE_CURRENT_BINARY_DIR}/generated "${TEDGE_C8Y_CA_FILES}")
+tedge_download_ca_bundle(${CMAKE_CURRENT_BINARY_DIR}/generated
+  "${TEDGE_DOWNLOAD_CA_FILES}")
 
 if(TEDGE_POSIX_SAMPLES)
   add_subdirectory(samples/minimal)

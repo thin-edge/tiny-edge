@@ -106,12 +106,13 @@ that ends at any anchor in the set. The only ways an addition hurts are heap
 ```c
 /* include/tedge/port/net.h */
 enum tedge_port_ca_scope {
-	TEDGE_PORT_CA_DOWNLOAD, /* TEDGE_PORT_TLS_DOWNLOAD only */
-	TEDGE_PORT_CA_TENANT,   /* every TLS mode */
+	TEDGE_PORT_CA_DOWNLOAD, /* TEDGE_PORT_TLS_DOWNLOAD only (group 1) */
+	TEDGE_PORT_CA_TENANT,   /* every TLS mode (added with group 5) */
 };
 
-struct tedge_port_der {
-	const void *der;
+/* A DER certificate, or PEM text (one or more certificates) with its NUL. */
+struct tedge_port_ca_buf {
+	const void *data;
 	size_t len;
 };
 
@@ -120,7 +121,7 @@ struct tedge_port_der {
  * count == 0 clears them. Takes effect for connections opened afterwards.
  * @return 0, or a negative errno (-ENOSPC: the port cannot hold that many). */
 int tedge_port_tls_set_extra_ca(enum tedge_port_ca_scope scope,
-				const struct tedge_port_der *certs, size_t count);
+				const struct tedge_port_ca_buf *bufs, size_t count);
 
 enum tedge_port_security {
 	TEDGE_PORT_TCP,
@@ -131,12 +132,13 @@ enum tedge_port_security {
 ```
 
 The compiled-in download roots (`TEDGE_DOWNLOAD_CA_FILES`, decision 9) are
-passed as the first entries of the download scope, so the port sees one list
-per scope.
+passed as the first entry of the download scope, one PEM buffer holding all
+of them; stored anchors follow as one DER buffer each. A buffer may be
+either format because `mbedtls_x509_crt_parse()`, which both kinds of port
+end in, accepts a DER certificate or a NUL-terminated PEM bundle.
 
-- **Zephyr:** one sec tag per extra anchor (`TAG_EXTRA_CA_BASE + i`, DER, one
-  credential each, since a Zephyr CA credential in DER holds one
-  certificate). The tag list for a socket is built per connection: tenant
+- **Zephyr:** one sec tag per buffer (`TAG_DOWNLOAD_CA_BASE + i`), since
+  Zephyr holds one CA credential per tag. The tag list for a socket is built per connection: tenant
   tag, then tenant-scope tags, then download-scope tags for
   `TEDGE_PORT_TLS_DOWNLOAD`. The port's Kconfig raises
   `CONFIG_TLS_MAX_CREDENTIALS_NUMBER` and
@@ -146,7 +148,7 @@ per scope.
   already open has parsed its CA chain and is unaffected.
 - **Common (`tedge_sockets.c`):** store the arrays under `cred_lock`; in
   `tls_setup()`, after parsing the bundle, call
-  `mbedtls_x509_crt_parse_der()` for each extra in scope. A certificate that
+  `mbedtls_x509_crt_parse()` for each extra buffer in scope. A certificate that
   fails to parse here is skipped with a warning rather than failing the
   connection (it was validated before storing, so this means a build with
   different mbedTLS options read an older value). The verify-failure log
@@ -275,10 +277,12 @@ reconnecting on purpose would only add risk. `tedge_c8y.c` keeps
 
 ### 9. Compiled-in download roots (`TEDGE_DOWNLOAD_CA_FILES`)
 
-A second bundle, built by the same cmake helper, embedded in
-`tedge_trust.c` and passed as the first download-scope entries, decoded to
-DER at build time (the helper gains a DER mode) so the port interface sees
-one format. Default: ISRG Root X1 and USERTrust ECC Certification Authority,
+A second PEM bundle, `tedge_download_ca.inc`, built by the same cmake helper
+as the tenant bundle (`tedge_download_ca_bundle()` in
+`ports/common/cmake/tedge_ca_bundle.cmake`), embedded in `tedge_c8y.c`
+beside the tenant bundle and registered with the tenant bundle on the first
+connect. When `tedge_trust.c` arrives (group 2) it takes over the
+registration and passes the bundle as the first download-scope buffer. Default: ISRG Root X1 and USERTrust ECC Certification Authority,
 which together cover github.com, release-assets.githubusercontent.com,
 objects.githubusercontent.com and most public HTTPS hosts. Set the option
 empty to drop them. They are not added to `TEDGE_C8Y_CA_FILES`, so the
@@ -320,8 +324,11 @@ replace mode is the one thing that strands a fleet.
   rely on firmware updates for rotation, which need the tenant connection
   too.
 - **A malicious anchor in download scope lets someone serve a fake firmware
-  or config file over TLS.** → Firmware images are still signature-checked
-  by MCUboot (or the port's image check), so a fake image is rejected.
+  or config file over TLS.** → The port still checks every image, and
+  rejects a fake one when the bootloader requires signatures (MCUboot with a
+  signing key, ESP-IDF secure boot). Without required signatures, any host
+  the device trusts for downloads can supply firmware; the operator guide
+  says to require them.
   Config files are not signed; the only config type is trust anchors, which
   cannot affect tenant connections from download scope. Whoever can push
   configuration already controls the device through the tenant.

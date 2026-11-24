@@ -71,6 +71,34 @@ bool tedge_port_net_on_subnet(const uint8_t addr[4]);
  *  included. @return 0, or a negative errno. */
 int tedge_port_tls_set_ca(const void *pem, size_t len);
 
+/** Which connections an extra set of trust anchors is for. */
+enum tedge_port_ca_scope {
+	/** Only TEDGE_PORT_TLS_DOWNLOAD connections: hosts outside the
+	 *  tenant. */
+	TEDGE_PORT_CA_DOWNLOAD,
+};
+
+/** One buffer of trust anchors: a DER certificate, or PEM text holding
+ *  one or more certificates with its NUL included. */
+struct tedge_port_ca_buf {
+	const void *data;
+	size_t len;
+};
+
+/**
+ * Replace the extra trust anchors of @p scope, trusted in addition to the
+ * set given to tedge_port_tls_set_ca() by the connections of that scope.
+ * @p count 0 clears them. The buffers, and the array, must stay valid
+ * until the next call for the same scope. Connections already open keep
+ * the anchors they started with.
+ *
+ * @return 0; -ENOSPC when the port cannot hold @p count buffers; or
+ *         another negative errno.
+ */
+int tedge_port_tls_set_extra_ca(enum tedge_port_ca_scope scope,
+				const struct tedge_port_ca_buf *bufs,
+				size_t count);
+
 /** The device's own certificate, DER, replacing any earlier one. The
  *  port presents it with the device key (crypto.h), which it keeps.
  *  @return 0, or a negative errno. */
@@ -89,6 +117,9 @@ enum tedge_port_security {
 	TEDGE_PORT_TLS,
 	/** TLS 1.2 as above, presenting the device's certificate too. */
 	TEDGE_PORT_TLS_DEVICE,
+	/** TLS 1.2, verifying the server against the CA set above plus the
+	 *  TEDGE_PORT_CA_DOWNLOAD anchors. For hosts outside the tenant. */
+	TEDGE_PORT_TLS_DOWNLOAD,
 };
 
 /**

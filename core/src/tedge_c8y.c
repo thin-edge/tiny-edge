@@ -55,6 +55,19 @@ static const unsigned char server_ca[] = {
 	0x00
 };
 
+#if defined(TEDGE_HTTP)
+/* The roots listed in TEDGE_DOWNLOAD_CA_FILES, trusted only for downloads
+ * from hosts outside the tenant (tedge_http_security()). Just the NUL when
+ * the list is empty. */
+static const unsigned char download_ca[] = {
+#include "tedge_download_ca.inc"
+	0x00
+};
+static const struct tedge_port_ca_buf download_ca_bufs[] = {
+	{ download_ca, sizeof(download_ca) },
+};
+#endif
+
 
 /* Downstream topics: thin-edge.io's Cumulocity bridge set, minus the
  * bootstrap topics (tedge_bootstrap.c owns those). */
@@ -1234,6 +1247,18 @@ static int c8y_connect(void)
 				      ret);
 			return ret;
 		}
+#if defined(TEDGE_HTTP)
+		if (sizeof(download_ca) > 1) {
+			ret = tedge_port_tls_set_extra_ca(TEDGE_PORT_CA_DOWNLOAD,
+							  download_ca_bufs, 1);
+			if (ret != 0) {
+				/* Downloads outside the tenant then verify
+				 * against the tenant's anchors only. */
+				TEDGE_LOG_WRN("could not register the download "
+					      "roots (%d)", ret);
+			}
+		}
+#endif
 		ca_registered = true;
 	}
 

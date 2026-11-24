@@ -514,7 +514,22 @@ int tedge_http_connect(const char *host, uint16_t port, bool tls,
 	if (rc != 0) {
 		return (rc == -ENOENT) ? -EHOSTUNREACH : rc;
 	}
-	return tedge_port_connect(addr, port,
-				  tls ? TEDGE_PORT_TLS : TEDGE_PORT_TCP, host,
-				  timeout_ms);
+	return tedge_port_connect(addr, port, tedge_http_security(host, tls),
+				  host, timeout_ms);
+}
+
+enum tedge_port_security tedge_http_security(const char *host, bool tls)
+{
+	if (!tls) {
+		return TEDGE_PORT_TCP;
+	}
+#if defined(TEDGE_HTTP)
+	/* A host outside the tenant (a firmware URL on GitHub, the host it
+	 * redirects to) may also be verified by the download-only roots. The
+	 * tenant never is: the same split as where the token may go. */
+	if (!tedge_url_is_tenant(host)) {
+		return TEDGE_PORT_TLS_DOWNLOAD;
+	}
+#endif
+	return TEDGE_PORT_TLS;
 }

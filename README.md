@@ -115,6 +115,24 @@ Devices talk to the Cumulocity MQTT Service on thin-edge.io `te/` topics.
 [`cumulocity/`](cumulocity/README.md) holds the Smart Functions that map
 them, and the DTM definitions for the client's own parameter sets.
 
+## Trusted roots
+
+Every port embeds two sets of root certificates from `certs/`:
+
+| Option | Default | Trusted for |
+|---|---|---|
+| `TEDGE_C8Y_CA_FILES` | `certs/godaddy-root-g2.pem` | Every TLS connection: the MQTT session, remote access, enrollment, and HTTP calls to the tenant |
+| `TEDGE_DOWNLOAD_CA_FILES` | `certs/isrg-root-x1.pem certs/usertrust-ecc.pem` | Only downloads from hosts outside the tenant's domain, such as a firmware URL on GitHub (github.com chains to USERTrust ECC, its release hosts to ISRG Root X1) |
+
+The download roots never verify the tenant, so they cannot widen who can
+impersonate it. Wherever an image comes from, the port checks it as before:
+its hash, and its signature when the bootloader is set up to require one
+(MCUboot with a signing key, ESP-IDF secure boot). Require signatures if a
+download host should not be able to supply firmware. Set
+`TEDGE_DOWNLOAD_CA_FILES` empty to verify downloads against the tenant's
+roots only, or list your own PEM files. Managing extra roots from Cumulocity
+is proposed in [openspec/changes/trust-anchor-config](openspec/changes/trust-anchor-config/proposal.md).
+
 ## Releases
 
 Pull request titles are Conventional Commits. release-please keeps a release

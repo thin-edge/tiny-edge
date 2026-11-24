@@ -52,6 +52,9 @@ target_compile_definitions(app PRIVATE
   # A small ring, so "it wrapped" is one test away.
   CONFIG_TEDGE_LOG_RING_BYTES=256
   CONFIG_TEDGE_C8Y_OPERATION_JSON=1
+  # Downloads: tedge_http.c picks the download-only roots for hosts
+  # outside the tenant.
+  CONFIG_TEDGE_HTTP=1
   # Parameters: room for the mixed set the tests declare, and the
   # schema printer, which is what the tenant registration needs.
   CONFIG_TEDGE_PARAMETERS=1

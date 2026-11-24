@@ -50,3 +50,13 @@ if(TEDGE_LOG_UPLOAD)
   target_link_libraries(tedge-log-busy-test PRIVATE tedge::tedge)
   add_test(NAME log_busy COMMAND tedge-log-busy-test)
 endif()
+
+# Which roots each kind of TLS connection trusts, against a loopback server.
+add_executable(tedge-tls-test test_tls.c)
+set_target_properties(tedge-tls-test PROPERTIES C_STANDARD 11)
+target_compile_definitions(tedge-tls-test PRIVATE _POSIX_C_SOURCE=200809L
+  _DEFAULT_SOURCE _DARWIN_C_SOURCE)
+target_include_directories(tedge-tls-test PRIVATE
+  ${CMAKE_BINARY_DIR}/generated)
+target_link_libraries(tedge-tls-test PRIVATE tedge::tedge)
+add_test(NAME tls COMMAND tedge-tls-test)

@@ -43,9 +43,10 @@ root of trust can be read and extended remotely without reflashing.
 - **A complementary build option, `TEDGE_DOWNLOAD_CA_FILES`**: compiled-in
   roots used only for downloads outside the tenant, defaulting to ISRG Root
   X1 and USERTrust ECC, so GitHub release URLs work out of the box. The
-  tenant bundle (`TEDGE_C8Y_CA_FILES`) is unchanged. MCUboot (or the port's
-  own image check) still verifies the signature of every firmware image, so
-  a wider download trust does not weaken image integrity.
+  tenant bundle (`TEDGE_C8Y_CA_FILES`) is unchanged. The port still checks
+  every firmware image (hash, and signature when MCUboot signing or ESP-IDF
+  secure boot is configured), so with signatures required a wider download
+  trust does not weaken image integrity.
 
 ### Non-goals
 

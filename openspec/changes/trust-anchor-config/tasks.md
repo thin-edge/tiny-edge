@@ -1,13 +1,13 @@
 ## 1. Compiled-in download roots (ships first, fixes GitHub firmware URLs)
 
-- [ ] 1.1 Add `certs/isrg-root-x1.pem` and `certs/usertrust-ecc.pem`, each with a comment giving source URL, SHA-256 fingerprint and expiry
-- [ ] 1.2 Extend `ports/common/cmake/tedge_ca_bundle.cmake` with a DER mode that emits a table of DER certificates (`tedge_download_ca.inc`), and wire it into `ports/nuttx/tools/generate.cmake` and `ports/zephyr/CMakeLists.txt`
-- [ ] 1.3 Add `TEDGE_DOWNLOAD_CA_FILES` to the Zephyr Kconfig, ESP-IDF Kconfig, NuttX Kconfig and `ports/posix/cmake/options.cmake`, with the two roots as default and `tests/host-compile/include/tedge_config.h` updated
-- [ ] 1.4 Port interface: add `enum tedge_port_ca_scope`, `struct tedge_port_der`, `tedge_port_tls_set_extra_ca()` and `TEDGE_PORT_TLS_DOWNLOAD` to `include/tedge/port/net.h`, with doc comments (lifetime rule as for `tedge_port_tls_set_ca`)
-- [ ] 1.5 Common port: implement `tedge_port_tls_set_extra_ca()` and `TEDGE_PORT_TLS_DOWNLOAD` in `ports/common/src/tedge_sockets.c` (parse extras per connection under `cred_lock`, skip unparsable ones with a warning); log host and anchor count on verify failure
-- [ ] 1.6 Zephyr port: implement both in `ports/zephyr/src/tedge_port_net.c` with one sec tag per extra anchor and a per-connection tag list; raise `CONFIG_TLS_MAX_CREDENTIALS_NUMBER` and `CONFIG_NET_SOCKETS_TLS_MAX_CREDENTIALS` in the port Kconfig by the configured maxima
-- [ ] 1.7 Core: in `core/src/tedge_http.c`, open hosts outside the tenant's domain with `TEDGE_PORT_TLS_DOWNLOAD` (reuse the token-domain predicate from `tedge_http_download.c`); register the compiled-in download roots once at start-up
-- [ ] 1.8 Host tests (POSIX): a local HTTPS server with a test CA added through the port call verifies only in download mode; the tenant mode rejects it
+- [x] 1.1 Add `certs/isrg-root-x1.pem` and `certs/usertrust-ecc.pem`, each with a comment giving source URL, SHA-256 fingerprint and expiry
+- [x] 1.2 Extend `ports/common/cmake/tedge_ca_bundle.cmake` to emit a second PEM bundle (`tedge_download_ca.inc`, usable from `cmake -P`), and wire it into every port's build (Zephyr, ESP-IDF, NuttX `tools/generate.cmake`, POSIX)
+- [x] 1.3 Add `TEDGE_DOWNLOAD_CA_FILES` to the Zephyr Kconfig, ESP-IDF Kconfig, NuttX Kconfig and `ports/posix/cmake/options.cmake`, with the two roots as default and `tests/host-compile/include/tedge_config.h` updated
+- [x] 1.4 Port interface: add `enum tedge_port_ca_scope` (download scope only for now), `struct tedge_port_ca_buf` (DER or PEM), `tedge_port_tls_set_extra_ca()` and `TEDGE_PORT_TLS_DOWNLOAD` to `include/tedge/port/net.h`, with doc comments (lifetime rule as for `tedge_port_tls_set_ca`)
+- [x] 1.5 Common port: implement `tedge_port_tls_set_extra_ca()` and `TEDGE_PORT_TLS_DOWNLOAD` in `ports/common/src/tedge_sockets.c` (parse extras per connection under `cred_lock`, skip unparsable ones with a warning); log host and anchor count on verify failure
+- [x] 1.6 Zephyr port: implement both in `ports/zephyr/src/tedge_port_net.c` with one sec tag per buffer and a per-connection tag list (raising `CONFIG_TLS_MAX_CREDENTIALS_NUMBER` for stored anchors is left to group 4; the compiled-in bundle uses the 4th of the default 4 slots)
+- [x] 1.7 Core: in `core/src/tedge_http.c`, open hosts outside the tenant's domain with `TEDGE_PORT_TLS_DOWNLOAD` (reuse the token-domain predicate from `tedge_http_download.c`); register the compiled-in download roots with the tenant bundle on the first connect
+- [x] 1.8 Host tests (POSIX): a local HTTPS server with a test CA added through the port call verifies only in download mode; the tenant mode rejects it
 - [ ] 1.9 Hardware check: firmware update from a GitHub release URL succeeds on the NuttX ESP32-C6 build and on Zephyr ESP32-S3-DevKitC; record the result in the PR
 
 ## 2. Trust store in core (`core/src/tedge_trust.c`)

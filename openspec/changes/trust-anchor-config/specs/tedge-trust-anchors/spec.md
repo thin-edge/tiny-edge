@@ -57,7 +57,7 @@ empty value SHALL embed none.
 - **WHEN** a device built with the default options receives a firmware
   operation whose URL is a GitHub release asset
 - **THEN** the TLS handshakes to github.com and to the redirect target
-  succeed, and the image is installed only if its signature check passes
+  succeed, and the image is installed only if the port's image check passes
 
 #### Scenario: Download roots removed
 
