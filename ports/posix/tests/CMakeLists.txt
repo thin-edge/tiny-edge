@@ -38,3 +38,15 @@ if(TEDGE_SHELL_COMMAND)
   target_link_libraries(tedge-shell-test PRIVATE tedge::tedge)
   add_test(NAME shell COMMAND tedge-shell-test)
 endif()
+
+# One HTTP transfer at a time: a log job reports itself busy while it runs.
+if(TEDGE_LOG_UPLOAD)
+  add_executable(tedge-log-busy-test test_log_busy.c)
+  set_target_properties(tedge-log-busy-test PROPERTIES C_STANDARD 11)
+  target_compile_definitions(tedge-log-busy-test PRIVATE
+    _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE _DARWIN_C_SOURCE)
+  target_include_directories(tedge-log-busy-test PRIVATE
+    $<TARGET_PROPERTY:tedge,INCLUDE_DIRECTORIES>)
+  target_link_libraries(tedge-log-busy-test PRIVATE tedge::tedge)
+  add_test(NAME log_busy COMMAND tedge-log-busy-test)
+endif()

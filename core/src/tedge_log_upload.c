@@ -354,6 +354,11 @@ done:
 /* The request                                                               */
 /* ------------------------------------------------------------------------ */
 
+bool tedge_log_busy(void)
+{
+	return job_running;
+}
+
 int tedge_log_request(const char *line, char *reason, size_t rlen)
 {
 	char type[32], field[24];
@@ -368,6 +373,13 @@ int tedge_log_request(const char *line, char *reason, size_t rlen)
 		snprintf(reason, rlen, "a log is already being sent");
 		return -EBUSY;
 	}
+#if defined(TEDGE_FIRMWARE_UPDATE)
+	/* The HTTP client's buffers are static: one transfer at a time. */
+	if (tedge_fw_busy()) {
+		snprintf(reason, rlen, "busy: a firmware update is running");
+		return -EBUSY;
+	}
+#endif
 	if (reader_for(type, &unused) == NULL) {
 		snprintf(reason, rlen, "this device has no log called \"%s\"",
 			 type);
