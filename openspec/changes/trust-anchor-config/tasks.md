@@ -1,0 +1,61 @@
+## 1. Compiled-in download roots (ships first, fixes GitHub firmware URLs)
+
+- [ ] 1.1 Add `certs/isrg-root-x1.pem` and `certs/usertrust-ecc.pem`, each with a comment giving source URL, SHA-256 fingerprint and expiry
+- [ ] 1.2 Extend `ports/common/cmake/tedge_ca_bundle.cmake` with a DER mode that emits a table of DER certificates (`tedge_download_ca.inc`), and wire it into `ports/nuttx/tools/generate.cmake` and `ports/zephyr/CMakeLists.txt`
+- [ ] 1.3 Add `TEDGE_DOWNLOAD_CA_FILES` to the Zephyr Kconfig, ESP-IDF Kconfig, NuttX Kconfig and `ports/posix/cmake/options.cmake`, with the two roots as default and `tests/host-compile/include/tedge_config.h` updated
+- [ ] 1.4 Port interface: add `enum tedge_port_ca_scope`, `struct tedge_port_der`, `tedge_port_tls_set_extra_ca()` and `TEDGE_PORT_TLS_DOWNLOAD` to `include/tedge/port/net.h`, with doc comments (lifetime rule as for `tedge_port_tls_set_ca`)
+- [ ] 1.5 Common port: implement `tedge_port_tls_set_extra_ca()` and `TEDGE_PORT_TLS_DOWNLOAD` in `ports/common/src/tedge_sockets.c` (parse extras per connection under `cred_lock`, skip unparsable ones with a warning); log host and anchor count on verify failure
+- [ ] 1.6 Zephyr port: implement both in `ports/zephyr/src/tedge_port_net.c` with one sec tag per extra anchor and a per-connection tag list; raise `CONFIG_TLS_MAX_CREDENTIALS_NUMBER` and `CONFIG_NET_SOCKETS_TLS_MAX_CREDENTIALS` in the port Kconfig by the configured maxima
+- [ ] 1.7 Core: in `core/src/tedge_http.c`, open hosts outside the tenant's domain with `TEDGE_PORT_TLS_DOWNLOAD` (reuse the token-domain predicate from `tedge_http_download.c`); register the compiled-in download roots once at start-up
+- [ ] 1.8 Host tests (POSIX): a local HTTPS server with a test CA added through the port call verifies only in download mode; the tenant mode rejects it
+- [ ] 1.9 Hardware check: firmware update from a GitHub release URL succeeds on the NuttX ESP32-C6 build and on Zephyr ESP32-S3-DevKitC; record the result in the PR
+
+## 2. Trust store in core (`core/src/tedge_trust.c`)
+
+- [ ] 2.1 Storage layout: banked keys `tedge/trust/<scope>/{active,a/N,b/N}`, load active bank at `tedge_init()` into one heap block per scope and call `tedge_port_tls_set_extra_ca()`
+- [ ] 2.2 Atomic commit: write the inactive bank, delete leftover indexes, write `active`, load the new block, call the port, free the old block
+- [ ] 2.3 Streaming PEM splitter with a one-block buffer; decode each block to DER into a staging slot
+- [ ] 2.4 Validation: parse, CA basic constraint and key usage, validity period, key type supported by the build, size and count caps, skip built-in duplicates and repeats; reasons naming position and subject
+- [ ] 2.5 PEM writer for get: built-in subjects as comments, each extra as subject/expiry comment plus PEM (two passes through an upload sink, as log upload)
+- [ ] 2.6 Unit tests (`ports/zephyr/tests/unit` and POSIX tests): valid file, leaf cert, expired, too many, too large, built-in duplicate, empty file clears, reset between bank write and switch keeps old set
+
+## 3. Configuration operations in core (`core/src/tedge_config_mgmt.c`)
+
+- [ ] 3.1 Internal type registry (`struct tedge_config_type`) and `trusted-roots` / `tenant-roots` registration from `tedge_trust.c`
+- [ ] 3.2 Advertise types with SmartREST `119` on session start and add the two operations to the supported list; confirm the JSON-operation mode (`TEDGE_C8Y_OPERATION_JSON`) delivers `c8y_UploadConfigFile` and `c8y_DownloadConfigFile` and resolve the related open question in design.md
+- [ ] 3.3 `c8y_UploadConfigFile`: 501, create the `c8y_ConfigUpload` event, attach the binary with `tedge_upload()`, 503 with the URL; share the log-upload worker when it is compiled in
+- [ ] 3.4 `c8y_DownloadConfigFile`: 501, `tedge_download()` into the type's writer, 503 or 502 with the reason; refuse with "busy" during a firmware download
+- [ ] 3.5 Failure paths: unknown type, feature not compiled in, out of memory, download error; each reported with the reason in the 502
+- [ ] 3.6 Unit tests for the operation flow against a fake transport (sequence of 501/502/503 and the event/binary calls)
+
+## 4. Build options
+
+- [ ] 4.1 Zephyr Kconfig: `TEDGE_CONFIG_MGMT`, `TEDGE_TRUSTED_ROOTS`, `TEDGE_TRUSTED_ROOTS_TENANT`, `TEDGE_TRUSTED_ROOTS_MAX`, `TEDGE_TRUSTED_ROOTS_MAX_DER`, with dependencies on firmware update's download path and log upload's upload path
+- [ ] 4.2 ESP-IDF Kconfig and component CMake for the same options
+- [ ] 4.3 NuttX Kconfig, `Make.defs`/CMake and `configs/small.conf` override (`MAX = 2`)
+- [ ] 4.4 POSIX `cmake/options.cmake`; Zephyr board profiles `esp32c6-devkitc.conf` and `esp32-devkitc.conf` override `MAX = 2`; add the feature to `profiles/full.conf`
+
+## 5. Tenant scope (`tenant-roots`)
+
+- [ ] 5.1 Core: register `tenant-roots` only with `TEDGE_TRUSTED_ROOTS_TENANT`; pass the tenant-scope list at start-up and after each set
+- [ ] 5.2 Common port: include tenant-scope extras for `TEDGE_PORT_TLS` and `TEDGE_PORT_TLS_DEVICE`
+- [ ] 5.3 Zephyr port: include tenant-scope tags in both tag lists
+- [ ] 5.4 POSIX system test: a local MQTT broker with a certificate from a second CA connects only after that CA is pushed to `tenant-roots`, and the built-in anchor still works after an empty push
+
+## 6. System tests against Cumulocity
+
+- [ ] 6.1 Robot test: get `trusted-roots`, push a file with a new root, get again and compare, push an empty file
+- [ ] 6.2 Robot test: push a leaf certificate and an oversized file; both operations fail with the expected reason and the stored set is unchanged
+- [ ] 6.3 Robot test: firmware update from a URL that needs a pushed root succeeds only after the push
+
+## 7. Documentation
+
+- [ ] 7.1 Operator guide: config types, file format, scopes, limits, and the rotation caveat (push the new tenant root before the old one stops being served; offline devices need a reflash)
+- [ ] 7.2 Port READMEs: new options, Zephyr credential limits, RAM cost per anchor and the defaults on boards without PSRAM
+- [ ] 7.3 Update the NuttX and Zephyr READMEs and REPORT.md where they say the client trusts only the tenant CA
+
+## 8. Measurements
+
+- [ ] 8.1 Measure flash and static RAM for `TEDGE_DOWNLOAD_CA_FILES` alone, and for `TEDGE_CONFIG_MGMT` with default options, on ESP32-S3-DevKitC, ESP32-C6-DevKitC, ESP32-DevKitC, QT Py ESP32-S3, ESP32-CAM and the NuttX ESP32-C6/S3 builds
+- [ ] 8.2 Measure peak heap during a firmware download with 0, 2 and 4 extra anchors on ESP32-C6-DevKitC (no PSRAM); adjust the defaults if the download fails
+- [ ] 8.3 Fill the measured numbers into proposal.md's build-options section
