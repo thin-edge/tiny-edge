@@ -15,23 +15,72 @@ parameters, shell) need no mapping.
 | `smart-functions/tiny-edge-events/` | `te/device/*///e/*` → events | any event, including `zephyr_Identify` from the sw0 identify pattern |
 | `dtm/*.json` | Digital Twin Manager property definitions for the client's own parameter sets (`tiny_edge`, `tiny_edge_remote_access`); an application registers its own sets the same way | the Parameters tab |
 
+## Set up a tenant
+
+With a go-c8y-cli session for the tenant (`set-session`), one command does
+everything below:
+
+```sh
+cumulocity/setup-tenant.sh --dry-run   # what it would change; changes nothing
+cumulocity/setup-tenant.sh
+```
+
+It prints the host it is about to change, then:
+
+1. Checks that the tenant features `mqtt-service.smartrest` and
+   `certificate-authority` are active, and stops if one is not, naming the
+   command that enables it (`c8y features enable --key <feature>`).
+   `--enable-features` enables them instead. Without
+   `mqtt-service.smartrest` the MQTT Service drops a device as soon as it
+   subscribes to `devicecontrol/notifications`; the device logs -113.
+2. Deploys every Smart Function under `smart-functions/`, and reports each
+   rule's HTTP status. Any status other than 200 fails the script.
+3. Registers the DTM parameter sets with `dtm/register.sh`. A set that is
+   already there is left alone; `--replace` re-registers it.
+
+An application registers its own parameter sets with `--dtm-dir`, alone or
+with the rest:
+
+```sh
+path/to/tiny-edge/cumulocity/setup-tenant.sh --dtm-dir cumulocity/dtm
+path/to/tiny-edge/cumulocity/dtm/register.sh --dir cumulocity/dtm   # only the application's sets
+```
+
+Set up the tenant before devices connect, or reconnect them afterwards
+(a restart is enough). A device sends its twin fragments (`c8y_Agent`,
+`c8y_Hardware`, `remoteAccess` and every parameter set) once per
+connection. Without the twin Smart Function those messages are dropped, so a
+device that connected first shows no Parameters tab until it reconnects.
+Measurements recover on their own because the device keeps sending them.
+
+`--no-smart-functions` and `--no-dtm` skip steps 2 and 3 (`--dtm-dir` sets
+are still registered). `--help` lists every option.
+
 ## Smart Functions
 
 Each directory is a Data Preparation rule package: `data-prep.yaml` (the
-topic pattern), the JavaScript, and `tests/*.yaml`. Create a Smart Function
-in the Data Preparation UI with the topic and the JavaScript, or deploy the
-package:
+topic pattern), the JavaScript, and `tests/*.yaml`. `setup-tenant.sh`
+deploys all of them. Each GitHub release also carries one
+`<rule>.tar.gz` per Smart Function, which you can import in the Data
+Preparation UI or deploy as it is. `smart-functions/package.sh <out-dir>`
+builds the same archives from a checkout.
+
+To deploy one package by hand, send it as the raw request body:
 
 ```sh
-cd cumulocity/smart-functions/tiny-edge-twin
-# COPYFILE_DISABLE: macOS tar otherwise adds ._* files the service rejects
-COPYFILE_DISABLE=1 tar czf /tmp/rule.tar.gz data-prep.yaml twin.js tests
-# The archive must be the raw request body: `c8y api --file` sends a
-# multipart form, which the service answers with 400.
-curl -X PUT -H "Authorization: Bearer $C8Y_TOKEN" \
-  -H "Content-Type: application/gzip" --data-binary @/tmp/rule.tar.gz \
-  "$C8Y_HOST/service/dataprep/v1/rules/tiny-edge-twin/deployed"
+cumulocity/smart-functions/package.sh /tmp/rules
+curl -X PUT -H "$C8Y_HEADER" \
+  -H "Content-Type: application/gzip" --data-binary @/tmp/rules/tiny-edge-twin.tar.gz \
+  "${C8Y_HOST%/}/service/dataprep/v1/rules/tiny-edge-twin/deployed"
 ```
+
+`C8Y_HEADER`, which `set-session` sets, holds the whole
+`Authorization: ...` line; `C8Y_HEADER_AUTHORIZATION` holds only its value
+and does not work as a `-H` argument. `c8y api --file` cannot send the
+package: it always sends a multipart form, which the service answers with
+400 "Failed to read request body". A package built with macOS tar needs
+`COPYFILE_DISABLE=1`, or it carries `._*` files the service rejects;
+`package.sh` sets it.
 
 `smart-functions/test.py` runs every rule's tests in a tenant's Data
 Preparation runtime (`/service/dataprep/v1/run-tests`) without deploying
@@ -85,6 +134,7 @@ user registering needs `ROLE_DIGITAL_TWIN_DEFINITIONS_CREATE` and `_ADMIN`.
 ```sh
 cumulocity/dtm/register.sh             # registers every set not yet there
 cumulocity/dtm/register.sh --replace zephyr_modbus_telemetry   # after a declaration changed
+cumulocity/dtm/register.sh --dry-run   # what it would register; changes nothing
 ```
 
 | Identifier | Declared by | Parameters |
