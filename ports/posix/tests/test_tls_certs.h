@@ -5,7 +5,8 @@
  *   tenant_ca  CN=tiny-edge test tenant CA     (stands for the tenant's root)
  *   dl_ca      CN=tiny-edge test dl CA         (a download-only root)
  *   srv_cert   CN=download.test, issued by dl_ca, SAN DNS:download.test
- * Test-only: the private key below protects nothing.
+ *   lh_cert    CN=localhost, issued by dl_ca, SAN DNS:localhost (a fake tenant)
+ * Test-only: the private keys below protect nothing.
  */
 
 #ifndef TEST_TLS_CERTS_H_
@@ -54,6 +55,25 @@ static const char srv_key[] =
 	"MHcCAQEEIPYAplKjWxip5ko4is5C2ptThvM8loetFLuUvoUYTmpEoAoGCCqGSM49\n"
 	"AwEHoUQDQgAEC7YznTXSpUhaKR4B5v3qKWWkOuNTq72n5xGKqA16/SptmbdiVGoB\n"
 	"IM4n3VSUqZlhajioqUOidV32VJnkfLAbiw==\n"
+	"-----END EC PRIVATE KEY-----\n";
+
+static const char lh_cert[] =
+	"-----BEGIN CERTIFICATE-----\n"
+	"MIIBbjCCARWgAwIBAgIUOUNEJy73cHE8Ix5x81Zy8ZjqicAwCgYIKoZIzj0EAwIw\n"
+	"HzEdMBsGA1UEAwwUdGlueS1lZGdlIHRlc3QgZGwgQ0EwIBcNMjYxMTI0MDM0MTM2\n"
+	"WhgPMjEyNjEwMzEwMzQxMzZaMBQxEjAQBgNVBAMMCWxvY2FsaG9zdDBZMBMGByqG\n"
+	"SM49AgEGCCqGSM49AwEHA0IABCxk4jXTofjyL5DsteHGgyJJTRc4R6prX0wQtxgI\n"
+	"/PcrZ14wd/7cLpf4qZXlUG5TCKYme7ZGz0joDCIS7f9ZdoajODA2MBQGA1UdEQQN\n"
+	"MAuCCWxvY2FsaG9zdDAJBgNVHRMEAjAAMBMGA1UdJQQMMAoGCCsGAQUFBwMBMAoG\n"
+	"CCqGSM49BAMCA0cAMEQCIBka7nzZfLgEAMDSxws584QbxXN3NG9asZlJ6XDxSe2Q\n"
+	"AiAkviF4oDkw5puD3sjKvYeupXvwCiej1TwQcQWkIbfWVA==\n"
+	"-----END CERTIFICATE-----\n";
+
+static const char lh_key[] =
+	"-----BEGIN EC PRIVATE KEY-----\n"
+	"MHcCAQEEIHswCK7rwrNvaxpTgQv2PvepvgHmm8F7YvKFkcB4MhuUoAoGCCqGSM49\n"
+	"AwEHoUQDQgAELGTiNdOh+PIvkOy14caDIklNFzhHqmtfTBC3GAj89ytnXjB3/twu\n"
+	"l/ipleVQblMIpiZ7tkbPSOgMIhLt/1l2hg==\n"
 	"-----END EC PRIVATE KEY-----\n";
 
 #endif /* TEST_TLS_CERTS_H_ */

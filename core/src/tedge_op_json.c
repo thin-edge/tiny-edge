@@ -194,6 +194,8 @@ bool tedge_operation_from_json(const char *json, char *line, size_t len)
 		{ "c8y_LogfileRequest", 522,
 		  { "logFile", "dateFrom", "dateTo", "searchText",
 		    "maximumLines", NULL } },
+		{ "c8y_DownloadConfigFile", 524, { "url", "type", NULL } },
+		{ "c8y_UploadConfigFile", 526, { "type", NULL } },
 		{ "c8y_RemoteAccessConnect", 530,
 		  { "hostname", "port", "connectionKey", NULL } },
 	};

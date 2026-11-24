@@ -162,37 +162,47 @@ credential would race with a connection being opened.
 
 ### 4. Configuration operations (`tedge_config_mgmt.c`)
 
-A small registry of configuration types, each with:
+A table of the configuration types compiled in, each with:
 
 ```c
-struct tedge_config_type {
+struct config_type {
 	const char *name;
-	/* Write the current file through sink; called twice (measure, send). */
-	int (*read)(tedge_upload_sink_t sink, void *sink_ctx, void *user);
-	/* Begin/feed/finish a new file; finish validates and commits, or
-	 * returns -errno with a reason string. */
-	int (*write_begin)(void *user);
-	int (*write_chunk)(const void *data, size_t len, void *user);
-	int (*write_end)(char *reason, size_t reason_cap, void *user);
-	void *user;
+	/* get: writes the file through the sink; the same bytes each time,
+	 * since it is called twice (measure, send). */
+	int (*read)(tedge_sink_fn sink, void *ctx);
+	/* set: begin, chunks, then end (or abort). end checks and stores,
+	 * or fills the reason. */
+	int (*write_begin)(void);
+	int (*write_chunk)(const void *data, size_t len);
+	int (*write_end)(char *reason, size_t cap);
+	void (*write_abort)(void);
 };
 ```
 
-The registry is internal (no public API in this change), so other types can
-be added later without a design change.
+The table is internal (no public API in this change), so other types can
+be added later without a design change. With no type compiled in, the
+operations are not advertised.
 
-- **On connect:** SmartREST `119,<type>,...` lists the compiled-in types.
-- **`c8y_UploadConfigFile`** (`526,<device>,<type>`): `501`, then create an
-  event `c8y_ConfigUpload` with the type, attach the binary through
-  `tedge_upload()` (two passes, as log upload), and `503` with the binary's
-  URL. Runs on the log-upload worker thread pattern (its own small stack, one
-  job at a time). If log upload is compiled in, the same worker is shared.
-- **`c8y_DownloadConfigFile`** (`524,<device>,<url>,<type>`): `501`, then
-  `tedge_download()` into the type's `write_chunk`, then `write_end`; `503`
-  on success, `502,<reason>` on failure. Runs on the thread that runs
-  firmware downloads, and is refused (`502,busy`) while a firmware update is
-  in progress, so the two never hold two download buffers at once.
-- An unknown type fails with `502,unknown configuration type <type>`.
+- **On connect:** `114` gains `c8y_UploadConfigFile,c8y_DownloadConfigFile`
+  and SmartREST `119,<type>,...` lists the types.
+- **`c8y_UploadConfigFile`** (`526,<device>,<type>`; JSON `{"type"}`):
+  executing, then the device resolves its managed-object id (as log upload
+  does), creates an event whose type is the configuration type, attaches
+  the file as its binary through `tedge_upload()` (two passes, as log
+  upload), and succeeds with the binary's URL.
+- **`c8y_DownloadConfigFile`** (`524,<device>,<url>,<type>`; JSON
+  `{"url","type"}`): executing, then `tedge_download()` into the type's
+  `write_chunk` (refused past `TEDGE_CONFIG_MAX_BYTES`), then `write_end`;
+  success, or failure with the type's reason or "download failed (<errno>)".
+- Both run on one thread of their own (`TEDGE_CONFIG_MGMT_STACK_SIZE`), one
+  request at a time, and report through a message queue that the client
+  thread drains. The operation is finished by the id kept with the request,
+  since others may arrive meanwhile.
+- The HTTP client keeps its receive buffers and redirect state in static
+  storage, so only one transfer may run at a time: a configuration request
+  is refused ("busy: ...") while a firmware download or a log upload runs,
+  and those are refused while a configuration request runs.
+- An unknown type fails with `unknown configuration type <type>`.
 
 ### 5. File format
 
@@ -203,7 +213,7 @@ Get produces PEM text:
 # built-in (read-only): CN=Go Daddy Root Certificate Authority - G2
 # built-in (read-only): CN=ISRG Root X1
 # built-in (read-only): CN=USERTrust ECC Certification Authority
-# extra 1: CN=Example Corp Root CA, expires 2041-03-01
+# 1: CN=Example Corp Root CA, expires 2041-03-01
 -----BEGIN CERTIFICATE-----
 ...
 -----END CERTIFICATE-----

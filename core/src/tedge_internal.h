@@ -213,6 +213,30 @@ struct tedge_upload {
 };
 
 int tedge_upload(struct tedge_upload *req);
+/* --- Configuration management (tedge_config_mgmt.c) --------------------- */
+
+#if defined(TEDGE_CONFIG_MGMT)
+struct tedge_config_event {
+	int rc;            /* 0 when the operation succeeded */
+	char op_name[32];  /* c8y_UploadConfigFile or c8y_DownloadConfigFile */
+	char op_id[24];    /* the operation's id, when the client knew it */
+	char text[160];    /* get: the binary's URL; otherwise why it failed */
+};
+
+/** Builds "119,<type>,…"; returns 0 when the image has no type. */
+size_t tedge_config_types_line(char *out, size_t len);
+/** Start sending the file a "526,<device>,<type>" line asks for. */
+int tedge_config_request_upload(const char *line, const char *op_id,
+				char *reason, size_t rlen);
+/** Start replacing a file from a "524,<device>,<url>,<type>" line. */
+int tedge_config_request_download(const char *line, const char *op_id,
+				  char *reason, size_t rlen);
+/** Next result from the configuration thread, or -ENOMSG. */
+int tedge_config_poll_event(struct tedge_config_event *ev);
+/** True while a configuration request runs (the HTTP client is in use). */
+bool tedge_config_busy(void);
+#endif
+
 /* --- Trusted roots (tedge_trust.c) --------------------------------------- */
 
 /** Give the port the roots trusted for downloads outside the tenant: those

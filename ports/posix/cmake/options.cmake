@@ -127,7 +127,10 @@ tedge_option(TEDGE_CERT_RENEW_BEFORE_DAYS INT 30 "Renew when this many days of l
 tedge_option(TEDGE_CERT_RENEW_ALARM_DAYS INT 7 "Raise an alarm when this many days are left and renewal failed")
 tedge_option(TEDGE_CERT_RENEW_CHECK_HOURS INT 24 "Hours between certificate checks")
 
-tedge_option(TEDGE_TRUSTED_ROOTS BOOL ON "Stored roots for downloads outside the tenant (needs an HTTP feature)")
+tedge_option(TEDGE_CONFIG_MGMT BOOL ON "Configuration management (c8y_UploadConfigFile, c8y_DownloadConfigFile)")
+tedge_option(TEDGE_CONFIG_MGMT_STACK_SIZE INT 8192 "Stack of the configuration thread (unused on POSIX)")
+tedge_option(TEDGE_CONFIG_MAX_BYTES INT 16384 "Largest configuration file the device downloads")
+tedge_option(TEDGE_TRUSTED_ROOTS BOOL ON "The trusted-roots configuration: stored roots for downloads outside the tenant")
 tedge_option(TEDGE_TRUSTED_ROOTS_MAX INT 4 "Most stored roots")
 tedge_option(TEDGE_TRUSTED_ROOTS_MAX_DER INT 1536 "Largest stored root, DER bytes")
 
@@ -200,13 +203,14 @@ if(NOT TEDGE_REMOTE_ACCESS)
   set(TEDGE_REMOTE_ACCESS_MDNS OFF)
 endif()
 
-if(TEDGE_LOG_UPLOAD)
+if(TEDGE_LOG_UPLOAD OR TEDGE_CONFIG_MGMT)
   tedge_derived(TEDGE_HTTP BOOL ON)
 else()
   tedge_derived(TEDGE_HTTP BOOL OFF)
 endif()
-# Stored roots verify downloads, so there must be something to download.
-if(NOT TEDGE_HTTP)
+# The stored roots are a configuration type: set and read through
+# configuration management.
+if(NOT TEDGE_CONFIG_MGMT)
   set(TEDGE_TRUSTED_ROOTS OFF)
 endif()
 if(TEDGE_HTTP OR TEDGE_AUTH_C8Y_CA OR TEDGE_REMOTE_ACCESS)

@@ -380,6 +380,13 @@ int tedge_log_request(const char *line, char *reason, size_t rlen)
 		return -EBUSY;
 	}
 #endif
+#if defined(TEDGE_CONFIG_MGMT)
+	/* The HTTP client's buffers are static: one transfer at a time. */
+	if (tedge_config_busy()) {
+		snprintf(reason, rlen, "busy: a configuration request is running");
+		return -EBUSY;
+	}
+#endif
 	if (reader_for(type, &unused) == NULL) {
 		snprintf(reason, rlen, "this device has no log called \"%s\"",
 			 type);

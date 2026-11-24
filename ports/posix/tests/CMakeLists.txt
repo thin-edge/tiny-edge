@@ -73,3 +73,15 @@ if(TEDGE_TRUSTED_ROOTS)
   target_link_libraries(tedge-trust-test PRIVATE tedge::tedge)
   add_test(NAME trust COMMAND tedge-trust-test)
 endif()
+
+# Configuration management against a fake tenant on loopback.
+if(TEDGE_CONFIG_MGMT AND TEDGE_TRUSTED_ROOTS)
+  add_executable(tedge-config-test test_config.c)
+  set_target_properties(tedge-config-test PROPERTIES C_STANDARD 11)
+  target_compile_definitions(tedge-config-test PRIVATE
+    _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE _DARWIN_C_SOURCE)
+  target_include_directories(tedge-config-test PRIVATE
+    $<TARGET_PROPERTY:tedge,INCLUDE_DIRECTORIES>)
+  target_link_libraries(tedge-config-test PRIVATE tedge::tedge)
+  add_test(NAME config COMMAND tedge-config-test)
+endif()

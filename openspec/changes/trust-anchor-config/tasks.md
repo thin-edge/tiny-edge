@@ -22,12 +22,13 @@
 
 ## 3. Configuration operations in core (`core/src/tedge_config_mgmt.c`)
 
-- [ ] 3.1 Internal type registry (`struct tedge_config_type`) and `trusted-roots` / `tenant-roots` registration from `tedge_trust.c`
-- [ ] 3.2 Advertise types with SmartREST `119` on session start and add the two operations to the supported list; confirm the JSON-operation mode (`TEDGE_C8Y_OPERATION_JSON`) delivers `c8y_UploadConfigFile` and `c8y_DownloadConfigFile` and resolve the related open question in design.md
-- [ ] 3.3 `c8y_UploadConfigFile`: 501, create the `c8y_ConfigUpload` event, attach the binary with `tedge_upload()`, 503 with the URL; share the log-upload worker when it is compiled in
-- [ ] 3.4 `c8y_DownloadConfigFile`: 501, `tedge_download()` into the type's writer, 503 or 502 with the reason; refuse with "busy" during a firmware download
-- [ ] 3.5 Failure paths: unknown type, feature not compiled in, out of memory, download error; each reported with the reason in the 502
-- [ ] 3.6 Unit tests for the operation flow against a fake transport (sequence of 501/502/503 and the event/binary calls)
+- [x] 3.1 Internal table of configuration types, with `trusted-roots` from `tedge_trust.c` (`tenant-roots` comes with group 5)
+- [x] 3.2 Advertise types with SmartREST `119` on session start and add the two operations to the supported list; map the JSON operations (`TEDGE_C8Y_OPERATION_JSON`) to 524/526. Not yet confirmed against a real tenant: needs a device build with the options (group 4)
+- [x] 3.3 `c8y_UploadConfigFile`: executing, create an event of the configuration's type, attach the binary with `tedge_upload()`, succeed with the URL. Own thread rather than the log-upload worker; the two never run at once
+- [x] 3.4 `c8y_DownloadConfigFile`: executing, `tedge_download()` into the type's writer, success or failure with the reason; refused with "busy" during a firmware download or log upload, and those refuse while it runs
+- [x] 3.5 Failure paths: unknown type, feature not compiled in, out of memory, download error; each reported with the reason in the 502
+- [x] 3.6 POSIX `tests/test_config.c` against a fake HTTPS tenant on loopback: types line, unknown type, malformed request, a set, busy, a refused certificate, 404, oversize, and a get (identity lookup, event of the configuration type on the device, binary with the file, result URL, operation ids)
+- [ ] 3.7 Check both operations against a real tenant on a device (after group 4)
 
 ## 4. Build options
 
