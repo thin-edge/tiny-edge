@@ -64,6 +64,27 @@ jobs:
           tools/onboard/build.sh "${TAG#v}" ${{ matrix.targets }}
           gh release upload "$TAG" tools/onboard/dist/* --clobber
 
+  # One Data Preparation package per Smart Function, which the Data
+  # Preparation UI imports and cumulocity/setup-tenant.sh deploys.
+  smart-functions:
+    name: Smart Function packages
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - name: Package and attach
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: |
+          cumulocity/smart-functions/package.sh dist
+          gh release upload "$TAG" dist/*.tar.gz --clobber
+
   # One checksums file for all of tedge-onboard's archives, which
   # "c8y extensions install" uses to verify the download. It runs after
   # every build has attached its archives.
