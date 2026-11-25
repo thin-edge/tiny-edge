@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.2](https://github.com/thin-edge/tiny-edge/compare/v0.10.1...v0.10.2) (2026-11-25)
+
+
+### Bug Fixes
+
+* **core:** remove a stale configuration list on connect ([c3303a8](https://github.com/thin-edge/tiny-edge/commit/c3303a856fc427eb63ee4329c07d0c61a6176496))
+* **core:** remove a stale configuration list on connect ([3c8fd39](https://github.com/thin-edge/tiny-edge/commit/3c8fd39d8df4b93a38aeefa503854216e8bcdb6a))
+
 ## [0.10.1](https://github.com/thin-edge/tiny-edge/compare/v0.10.0...v0.10.1) (2026-11-24)
 
 
