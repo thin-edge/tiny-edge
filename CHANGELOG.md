@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.11.0](https://github.com/thin-edge/tiny-edge/compare/v0.10.2...v0.11.0) (2026-11-25)
+
+
+### Features
+
+* **cumulocity:** attach a c8y-tenant-sync bundle to each release ([fa2dcd8](https://github.com/thin-edge/tiny-edge/commit/fa2dcd8814e1cc8bb8fa5e3284af1441944bdb12))
+* **cumulocity:** attach a standalone tenant manifest to each release ([32f16b9](https://github.com/thin-edge/tiny-edge/commit/32f16b9164b1db7e8000c2e81c0afe0f6cbbb6eb))
+* **cumulocity:** one tenant manifest with its dependencies ([4b789f6](https://github.com/thin-edge/tiny-edge/commit/4b789f6f25699bfd686937ca4bbf122e41d1047c))
+* **cumulocity:** set up a tenant with a c8y-tenant-sync bundle ([bc547bb](https://github.com/thin-edge/tiny-edge/commit/bc547bb93d2edaf1d806f8f7ba1ce4acf102db25))
+
 ## [0.10.2](https://github.com/thin-edge/tiny-edge/compare/v0.10.1...v0.10.2) (2026-11-25)
 
 
