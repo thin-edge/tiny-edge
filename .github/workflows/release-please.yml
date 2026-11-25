@@ -65,7 +65,7 @@ jobs:
           gh release upload "$TAG" tools/onboard/dist/* --clobber
 
   # One Data Preparation package per Smart Function, which the Data
-  # Preparation UI imports and cumulocity/setup-tenant.sh deploys.
+  # Preparation UI imports.
   smart-functions:
     name: Smart Function packages
     needs: release-please

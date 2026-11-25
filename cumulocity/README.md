@@ -88,21 +88,6 @@ connection. Without the twin Smart Function those messages are dropped, so a
 device that connected first shows no Parameters tab until it reconnects.
 Measurements recover on their own because the device keeps sending them.
 
-### Without c8y-tenant-sync
-
-`setup-tenant.sh` does the same with go-c8y-cli, curl and python3:
-
-```sh
-cumulocity/setup-tenant.sh --dry-run   # what it would change; changes nothing
-cumulocity/setup-tenant.sh
-```
-
-It checks the tenant features and stops when one is not active
-(`--enable-features` enables it instead), deploys every Smart Function, and
-registers the DTM sets with `dtm/register.sh`. A set that is already there is
-left alone; `--replace` re-registers it. An application registers its own
-sets with `--dtm-dir cumulocity/dtm`. `--help` lists every option.
-
 ## Smart Functions
 
 Each directory is a Data Preparation rule package: `data-prep.yaml` (the
@@ -112,7 +97,7 @@ Function, which you can import in the Data Preparation UI.
 `smart-functions/package.sh <out-dir>` builds the same archives from a
 checkout.
 
-To deploy a package without either tool, send it as the raw request body:
+To deploy a package without c8y-tenant-sync, send it as the raw request body:
 
 ```sh
 cumulocity/smart-functions/package.sh /tmp/rules
@@ -179,14 +164,8 @@ The tenant needs the `dtm` and `device-parameter` microservices, and the
 user registering needs `ROLE_DIGITAL_TWIN_DEFINITIONS_CREATE` and `_ADMIN`.
 
 The manifest registers the sets in `dtm/`, and updates a definition when its
-file changes, so after a declaration changed, regenerate the file and run it
-again. Without c8y-tenant-sync, `dtm/register.sh` registers them:
-
-```sh
-cumulocity/dtm/register.sh             # registers every set not yet there
-cumulocity/dtm/register.sh --replace zephyr_modbus_telemetry   # after a declaration changed
-cumulocity/dtm/register.sh --dry-run   # what it would register; changes nothing
-```
+file changes: after a declaration changed, regenerate the file and run the
+manifest again.
 
 | Identifier | Declared by | Parameters |
 |---|---|---|
