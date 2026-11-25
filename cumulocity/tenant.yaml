@@ -1,24 +1,43 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Everything a Cumulocity tenant needs for tiny-edge devices, as one
-# c8y-tenant-sync manifest (https://github.com/reubenmiller/c8y-tenant-sync):
-# the tenant features, plus the bundle of this release with the DTM
-# parameter sets and the Smart Functions (tenant-sync.yaml). Each release
-# carries it as tiny-edge-tenant.yaml:
+# Everything a Cumulocity tenant needs for tiny-edge devices, as a
+# c8y-tenant-sync manifest (https://github.com/reubenmiller/c8y-tenant-sync).
+# Each release carries it, with the files it uses, as the bundle
+# tiny-edge-tenant.tar.gz:
 #
-#   c8y tenant-sync run https://github.com/thin-edge/tiny-edge/releases/latest/download/tiny-edge-tenant.yaml --dry
+#   c8y tenant-sync run https://github.com/thin-edge/tiny-edge/releases/latest/download/tiny-edge-tenant.tar.gz --dry
 #
-# release-please updates the version below in every release PR, so the file
-# always includes the bundle of the release it belongs to.
+# The applications are owned by the management tenant. A tenant which may not
+# subscribe them itself reports them as skipped; its parent tenant (or the
+# Cumulocity provider) subscribes them.
 
 features:
   # Without it the MQTT Service drops a device as soon as it subscribes to
   # devicecontrol/notifications; the device logs -113.
   - key: mqtt-service.smartrest
+  # Devices get their certificate from the tenant's CA.
   - key: certificate-authority
+  # Shows the Data Preparation application.
+  - key: data-prep.ui-visibility
 
-include:
-  - github:
-      repo: thin-edge/tiny-edge
-      release: v0.10.2 # x-release-please-version
-      assets: ["tiny-edge-tenant-sync_*.tar.gz"]
+microservices:
+  - name: mqtt-service       # the devices' connection
+  - name: data-prep-ctrl     # runs the Smart Functions
+  - name: dtm                # Digital Twin Manager definitions
+  - name: device-parameter   # the Parameters tab
+
+applications:
+  - name: Data Preparation
+  - name: digital-twin-manager
+
+# The client's own parameter sets, for the Parameters tab
+digitalTwin:
+  propertyDefinitions:
+    - source:
+        path: ./dtm
+
+# The Smart Functions which map the te/ topics to measurements, events and
+# managed-object fragments
+smartFunctions:
+  - source:
+      path: ./smart-functions
