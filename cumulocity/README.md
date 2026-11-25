@@ -18,68 +18,55 @@ parameters, shell) need no mapping.
 ## Set up a tenant
 
 [c8y-tenant-sync](https://github.com/reubenmiller/c8y-tenant-sync), a
-go-c8y-cli extension, sets up a tenant from a manifest. tiny-edge's part is
-`tenant-sync.yaml`: the DTM parameter sets and every Smart Function. Each
-GitHub release (after 0.10.2) carries it as a bundle,
-`tiny-edge-tenant-sync_<version>.tar.gz`, with the files it uses.
+go-c8y-cli extension, sets up a tenant from a manifest. Each GitHub release
+(after 0.10.2) carries two:
 
-Install the extension once:
+| Asset | What it is |
+|---|---|
+| `tiny-edge-tenant.yaml` | The whole setup: enables the tenant features `mqtt-service.smartrest` and `certificate-authority`, and includes the bundle of the same release ([tenant.yaml](tenant.yaml)) |
+| `tiny-edge-tenant-sync_<version>.tar.gz` | The bundle: the DTM parameter sets and every Smart Function ([tenant-sync.yaml](tenant-sync.yaml) with the files it uses) |
+
+Install the extension once, then, with a go-c8y-cli session for the tenant
+(`set-session`), apply the latest release:
 
 ```sh
 c8y extensions install reubenmiller/c8y-tenant-sync
+c8y tenant-sync run https://github.com/thin-edge/tiny-edge/releases/latest/download/tiny-edge-tenant.yaml --dry   # what it would change; changes nothing
+c8y tenant-sync run https://github.com/thin-edge/tiny-edge/releases/latest/download/tiny-edge-tenant.yaml
 ```
 
-Then write the tenant's own manifest. It enables the tenant features the
-devices need and includes the bundle of the release the devices run:
+Without `mqtt-service.smartrest` the MQTT Service drops a device as soon as
+it subscribes to `devicecontrol/notifications`; the device logs -113.
+
+The run enables a feature that is not active, deploys a Smart Function whose
+code, configuration or tests differ from the deployed rule, and creates or
+updates a DTM definition that differs from its file. Anything already in
+place is left alone, so the run can be repeated, and it fails when an item
+fails. `--only smartFunctions` or `--only digitalTwin` applies one part.
+
+To keep the tenant on the release its devices run, include that release's
+manifest from the tenant's own manifest. An application adds its own
+parameter sets there too:
 
 ```yaml
 # tenant.yaml
-features:
-  # Without it the MQTT Service drops a device as soon as it subscribes to
-  # devicecontrol/notifications; the device logs -113.
-  - key: mqtt-service.smartrest
-  - key: certificate-authority
-
 include:
-  - github:
-      repo: thin-edge/tiny-edge
-      release: v<version>   # the tiny-edge release; or latest
-      assets: ["tiny-edge-tenant-sync_*.tar.gz"]
-```
+  - https://github.com/thin-edge/tiny-edge/releases/download/v<version>/tiny-edge-tenant.yaml
 
-The `assets` pattern is needed: the release also carries the per-rule
-`.tar.gz` packages. With a go-c8y-cli session for the tenant
-(`set-session`), apply it:
-
-```sh
-c8y tenant-sync run -f tenant.yaml --dry   # what it would change; changes nothing
-c8y tenant-sync run -f tenant.yaml
-```
-
-It enables a feature that is not active, deploys a Smart Function whose code,
-configuration or tests differ from the deployed rule, and creates or updates a
-DTM definition that differs from its file. Anything already in place is left
-alone, so the run can be repeated, and it fails when an item fails.
-
-To apply only tiny-edge's part, without the features, run the bundle as it is:
-
-```sh
-c8y tenant-sync run https://github.com/thin-edge/tiny-edge/releases/download/v<version>/tiny-edge-tenant-sync_<version>.tar.gz --dry
-```
-
-From a checkout, include the manifest instead of the bundle
-(`- path: path/to/tiny-edge/cumulocity/tenant-sync.yaml`), or run it with
-`c8y tenant-sync run -f cumulocity/tenant-sync.yaml`. `--only smartFunctions`
-or `--only digitalTwin` applies one part.
-
-An application adds its own parameter sets to the same manifest:
-
-```yaml
 digitalTwin:
   propertyDefinitions:
     - source:
-        path: ./cumulocity/dtm   # every *.json in it
+        path: ./cumulocity/dtm   # the application's sets: every *.json in it
 ```
+
+```sh
+c8y tenant-sync run -f tenant.yaml --dry
+```
+
+To leave the features to whoever manages the tenant, include or run only the
+bundle (`tiny-edge-tenant-sync_<version>.tar.gz`) instead. From a checkout,
+`c8y tenant-sync run -f cumulocity/tenant-sync.yaml` applies the DTM sets and
+Smart Functions of the checkout.
 
 Set up the tenant before devices connect, or reconnect them afterwards
 (a restart is enough). A device sends its twin fragments (`c8y_Agent`,

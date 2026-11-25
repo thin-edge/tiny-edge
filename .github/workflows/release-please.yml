@@ -85,9 +85,10 @@ jobs:
           cumulocity/smart-functions/package.sh dist
           gh release upload "$TAG" dist/*.tar.gz --clobber
 
-  # The tenant setup (DTM parameter sets and Smart Functions) as one
-  # c8y-tenant-sync bundle, which a tenant's manifest includes from the
-  # release or which "c8y tenant-sync run" applies as it is.
+  # The tenant setup for c8y-tenant-sync: a bundle with the DTM parameter
+  # sets and Smart Functions, and tiny-edge-tenant.yaml, which enables the
+  # tenant features and includes that bundle. "c8y tenant-sync run" applies
+  # either from the release, or a tenant's manifest includes it.
   tenant-sync-bundle:
     name: tenant-sync bundle
     needs: release-please
@@ -111,7 +112,14 @@ jobs:
         run: |
           bundle="tiny-edge-tenant-sync_${TAG#v}.tar.gz"
           c8y tenant-sync bundle cumulocity/tenant-sync.yaml -o "$bundle"
-          gh release upload "$TAG" "$bundle" --clobber
+          # The standalone manifest includes the bundle of its own release;
+          # release-please pins it in the release PR.
+          grep -q "release: $TAG " cumulocity/tenant.yaml || {
+            echo "cumulocity/tenant.yaml does not include the bundle of $TAG" >&2
+            exit 1
+          }
+          cp cumulocity/tenant.yaml tiny-edge-tenant.yaml
+          gh release upload "$TAG" "$bundle" tiny-edge-tenant.yaml --clobber
 
   # One checksums file for all of tedge-onboard's archives, which
   # "c8y extensions install" uses to verify the download. It runs after

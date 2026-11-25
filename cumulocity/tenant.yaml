@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Everything a Cumulocity tenant needs for tiny-edge devices, as one
+# c8y-tenant-sync manifest (https://github.com/reubenmiller/c8y-tenant-sync):
+# the tenant features, plus the bundle of this release with the DTM
+# parameter sets and the Smart Functions (tenant-sync.yaml). Each release
+# carries it as tiny-edge-tenant.yaml:
+#
+#   c8y tenant-sync run https://github.com/thin-edge/tiny-edge/releases/latest/download/tiny-edge-tenant.yaml --dry
+#
+# release-please updates the version below in every release PR, so the file
+# always includes the bundle of the release it belongs to.
+
+features:
+  # Without it the MQTT Service drops a device as soon as it subscribes to
+  # devicecontrol/notifications; the device logs -113.
+  - key: mqtt-service.smartrest
+  - key: certificate-authority
+
+include:
+  - github:
+      repo: thin-edge/tiny-edge
+      release: v0.10.2 # x-release-please-version
+      assets: ["tiny-edge-tenant-sync_*.tar.gz"]

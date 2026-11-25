@@ -19,7 +19,8 @@
   ],
   "packages": {
     ".": {
-      "version-file": "VERSION"
+      "version-file": "VERSION",
+      "extra-files": ["cumulocity/tenant.yaml"]
     }
   }
 }
