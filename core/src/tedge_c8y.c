@@ -852,6 +852,8 @@ static int subscribe_one(const char *topic)
 	return -EACCES;
 }
 
+static int publish_twin_impl(const char *fragment, const char *json);
+
 /* The operations this image can actually run. */
 static void publish_supported_ops(void)
 {
@@ -908,13 +910,20 @@ static void publish_supported_ops(void)
 		}
 	}
 #endif
-#if defined(TEDGE_CONFIG_MGMT)
 	/* c8y_SupportedConfigurations: the files this image can read and
-	 * replace. */
+	 * replace. An image with none removes the fragment instead: one left
+	 * by an earlier image (before a downgrade, or a build with other
+	 * features) would offer a type this image cannot serve, and 114 above
+	 * has already dropped the operations that serve it. Not an empty 119:
+	 * at best it would leave an empty list on every such device. */
+#if defined(TEDGE_CONFIG_MGMT)
 	if (have_config_types) {
 		(void)tedge_c8y_publish_sr(config_types);
-	}
+	} else
 #endif
+	{
+		(void)publish_twin_impl("c8y_SupportedConfigurations", "null");
+	}
 }
 
 static int publish_twin_impl(const char *fragment, const char *json)
