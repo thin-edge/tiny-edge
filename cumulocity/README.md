@@ -56,6 +56,33 @@ Measurements recover on their own because the device keeps sending them.
 `--no-smart-functions` and `--no-dtm` skip steps 2 and 3 (`--dtm-dir` sets
 are still registered). `--help` lists every option.
 
+### With c8y-tenant-sync
+
+[c8y-tenant-sync](https://github.com/reubenmiller/c8y-tenant-sync) applies
+steps 2 and 3 from `tenant-sync.yaml`. Each GitHub release (after 0.10.2) carries it as a
+bundle, `tiny-edge-tenant-sync_<version>.tar.gz`, which holds the manifest
+with the DTM sets and the Smart Functions it deploys. Apply it as it is:
+
+```sh
+c8y tenant-sync run https://github.com/thin-edge/tiny-edge/releases/download/v<version>/tiny-edge-tenant-sync_<version>.tar.gz --dry
+```
+
+or include it in the tenant's own manifest, pinned to the release its
+devices run:
+
+```yaml
+include:
+  - github:
+      repo: thin-edge/tiny-edge
+      release: v<version>   # or latest
+      assets: ["tiny-edge-tenant-sync_*.tar.gz"]
+```
+
+The `assets` pattern is needed: the release carries other `.tar.gz` files.
+The bundle does not enable the tenant features of step 1; declare them in
+the tenant's manifest (`features`). From a checkout,
+`c8y tenant-sync run -f cumulocity/tenant-sync.yaml --dry` applies the same.
+
 ## Smart Functions
 
 Each directory is a Data Preparation rule package: `data-prep.yaml` (the
