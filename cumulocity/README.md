@@ -17,33 +17,64 @@ parameters, shell) need no mapping.
 
 ## Set up a tenant
 
-With a go-c8y-cli session for the tenant (`set-session`), one command does
-everything below:
+[c8y-tenant-sync](https://github.com/reubenmiller/c8y-tenant-sync), a
+go-c8y-cli extension, sets up a tenant from [tenant.yaml](tenant.yaml). It
+declares everything the devices need:
+
+| Section | What it sets up |
+|---|---|
+| `features` | `mqtt-service.smartrest`, `certificate-authority`, and `data-prep.ui-visibility`, which shows the Data Preparation application |
+| `microservices` | `mqtt-service`, `data-prep-ctrl` (Smart Functions), `dtm` and `device-parameter` (Parameters tab) |
+| `applications` | Data Preparation and Digital Twin Manager |
+| `digitalTwin` | the DTM parameter sets in `dtm/` |
+| `smartFunctions` | every Smart Function in `smart-functions/` |
+
+Without `mqtt-service.smartrest` the MQTT Service drops a device as soon as
+it subscribes to `devicecontrol/notifications`; the device logs -113.
+
+Each GitHub release (after 0.10.2) carries the manifest and its files as a
+bundle, `tiny-edge-tenant.tar.gz`. Install the extension once, then, with a
+go-c8y-cli session for the tenant (`set-session`), apply the latest release:
 
 ```sh
-cumulocity/setup-tenant.sh --dry-run   # what it would change; changes nothing
-cumulocity/setup-tenant.sh
+c8y extensions install reubenmiller/c8y-tenant-sync
+c8y tenant-sync run https://github.com/thin-edge/tiny-edge/releases/latest/download/tiny-edge-tenant.tar.gz --dry   # what it would change; changes nothing
+c8y tenant-sync run https://github.com/thin-edge/tiny-edge/releases/latest/download/tiny-edge-tenant.tar.gz
 ```
 
-It prints the host it is about to change, then:
+From a checkout, `c8y tenant-sync run --dry` in this directory applies the
+checkout's `tenant.yaml`.
 
-1. Checks that the tenant features `mqtt-service.smartrest` and
-   `certificate-authority` are active, and stops if one is not, naming the
-   command that enables it (`c8y features enable --key <feature>`).
-   `--enable-features` enables them instead. Without
-   `mqtt-service.smartrest` the MQTT Service drops a device as soon as it
-   subscribes to `devicecontrol/notifications`; the device logs -113.
-2. Deploys every Smart Function under `smart-functions/`, and reports each
-   rule's HTTP status. Any status other than 200 fails the script.
-3. Registers the DTM parameter sets with `dtm/register.sh`. A set that is
-   already there is left alone; `--replace` re-registers it.
+The run enables a feature that is not active, subscribes a missing
+application, deploys a Smart Function whose code, configuration or tests
+differ from the deployed rule, and creates or updates a DTM definition that
+differs from its file. Anything already in place is left alone, so the run
+can be repeated, and it fails when an item fails. The applications are owned
+by the `management` tenant: a tenant which may not subscribe them itself
+reports them as skipped, and its parent tenant (or the Cumulocity provider)
+subscribes them. `--only digitalTwin,smartFunctions` applies only the DTM
+sets and the Smart Functions.
 
-An application registers its own parameter sets with `--dtm-dir`, alone or
-with the rest:
+To keep the tenant on the release its devices run, include that release's
+bundle from the tenant's own manifest. An application adds its own
+parameter sets there too:
+
+```yaml
+# tenant.yaml
+include:
+  - github:
+      repo: thin-edge/tiny-edge
+      release: v<version>   # or latest
+      assets: ["tiny-edge-tenant.tar.gz"]
+
+digitalTwin:
+  propertyDefinitions:
+    - source:
+        path: ./cumulocity/dtm   # the application's sets: every *.json in it
+```
 
 ```sh
-path/to/tiny-edge/cumulocity/setup-tenant.sh --dtm-dir cumulocity/dtm
-path/to/tiny-edge/cumulocity/dtm/register.sh --dir cumulocity/dtm   # only the application's sets
+c8y tenant-sync run -f tenant.yaml --dry
 ```
 
 Set up the tenant before devices connect, or reconnect them afterwards
@@ -53,19 +84,16 @@ connection. Without the twin Smart Function those messages are dropped, so a
 device that connected first shows no Parameters tab until it reconnects.
 Measurements recover on their own because the device keeps sending them.
 
-`--no-smart-functions` and `--no-dtm` skip steps 2 and 3 (`--dtm-dir` sets
-are still registered). `--help` lists every option.
-
 ## Smart Functions
 
 Each directory is a Data Preparation rule package: `data-prep.yaml` (the
-topic pattern), the JavaScript, and `tests/*.yaml`. `setup-tenant.sh`
-deploys all of them. Each GitHub release also carries one
-`<rule>.tar.gz` per Smart Function, which you can import in the Data
-Preparation UI or deploy as it is. `smart-functions/package.sh <out-dir>`
-builds the same archives from a checkout.
+topic pattern), the JavaScript, and `tests/*.yaml`. The manifest deploys all
+of them. Each GitHub release also carries one `<rule>.tar.gz` per Smart
+Function, which you can import in the Data Preparation UI.
+`smart-functions/package.sh <out-dir>` builds the same archives from a
+checkout.
 
-To deploy one package by hand, send it as the raw request body:
+To deploy a package without c8y-tenant-sync, send it as the raw request body:
 
 ```sh
 cumulocity/smart-functions/package.sh /tmp/rules
@@ -128,14 +156,12 @@ client writes both fragments itself.
 
 ## Parameters tab (DTM)
 
-The tenant needs the `dtm` and `device-parameter` microservices, and the
-user registering needs `ROLE_DIGITAL_TWIN_DEFINITIONS_CREATE` and `_ADMIN`.
+The tenant needs the `dtm` and `device-parameter` microservices (the
+manifest subscribes them), and the user registering needs `ROLE_DIGITAL_TWIN_DEFINITIONS_CREATE` and `_ADMIN`.
 
-```sh
-cumulocity/dtm/register.sh             # registers every set not yet there
-cumulocity/dtm/register.sh --replace zephyr_modbus_telemetry   # after a declaration changed
-cumulocity/dtm/register.sh --dry-run   # what it would register; changes nothing
-```
+The manifest registers the sets in `dtm/`, and updates a definition when its
+file changes: after a declaration changed, regenerate the file and run the
+manifest again.
 
 | Identifier | Declared by | Parameters |
 |---|---|---|
@@ -204,7 +230,7 @@ them needs these changes once its devices run a newer release:
   `tedge-zephyr-*` ones. They take the same topics, so with both deployed
   every message is stored twice.
 - **Parameters tab:** register `tiny_edge` and `tiny_edge_remote_access`
-  (`cumulocity/dtm/register.sh`). Keep the `zephyr_tedge` definitions while
+  (the manifest does, see "Set up a tenant"). Keep the `zephyr_tedge` definitions while
   devices on older releases remain.
 - **Old fragments:** an updated device writes `tiny_edge` and
   `tiny_edge_remote_access`, and leaves the old `zephyr_tedge` fragments on

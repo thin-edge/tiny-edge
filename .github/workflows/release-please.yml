@@ -65,7 +65,7 @@ jobs:
           gh release upload "$TAG" tools/onboard/dist/* --clobber
 
   # One Data Preparation package per Smart Function, which the Data
-  # Preparation UI imports and cumulocity/setup-tenant.sh deploys.
+  # Preparation UI imports.
   smart-functions:
     name: Smart Function packages
     needs: release-please
@@ -84,6 +84,34 @@ jobs:
         run: |
           cumulocity/smart-functions/package.sh dist
           gh release upload "$TAG" dist/*.tar.gz --clobber
+
+  # The tenant setup as a c8y-tenant-sync bundle: cumulocity/tenant.yaml with
+  # the DTM parameter sets and Smart Functions it deploys. It has no version
+  # in its name, so releases/latest/download/tiny-edge-tenant.tar.gz always
+  # gives the latest.
+  tenant-bundle:
+    name: Tenant bundle
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - uses: reubenmiller/setup-go-c8y-cli@main
+        with:
+          showVersion: false
+          showTenant: false
+          extensions: reubenmiller/c8y-tenant-sync@v0.11.1
+      - name: Bundle and attach
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: |
+          c8y tenant-sync bundle cumulocity/tenant.yaml -o tiny-edge-tenant.tar.gz
+          gh release upload "$TAG" tiny-edge-tenant.tar.gz --clobber
 
   # One checksums file for all of tedge-onboard's archives, which
   # "c8y extensions install" uses to verify the download. It runs after
