@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.1](https://github.com/thin-edge/tiny-edge/compare/v0.10.0...v0.10.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **nuttx:** send the remote-access mDNS query on the link ([5dcfe8d](https://github.com/thin-edge/tiny-edge/commit/5dcfe8dbfe60d0802628d8f00287a291da528269))
+* **nuttx:** send the remote-access mDNS query on the link ([8a41a96](https://github.com/thin-edge/tiny-edge/commit/8a41a966741a8d293f4c9df5a279b00dbf39c995))
+
 ## [0.10.0](https://github.com/thin-edge/tiny-edge/compare/v0.9.0...v0.10.0) (2026-11-24)
 
 
